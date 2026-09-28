@@ -1,0 +1,28 @@
+installer:
+    admin:
+        name: admin
+        password: KbTest1234!
+        email: admin@example.org
+    board:
+        lang: en
+        name: Knowledge Base Test
+        description: Local test board for the knowledgebase extension
+    database:
+        dbms: sqlite3
+        dbhost: {{PHPBB_ROOT}}/store/sqlite.db
+        dbport: null
+        dbuser: null
+        dbpasswd: null
+        dbname: {{PHPBB_ROOT}}/store/sqlite.db
+        table_prefix: phpbb_
+    email:
+        enabled: false
+    server:
+        cookie_secure: false
+        server_protocol: 'http://'
+        force_server_vars: true
+        server_name: '{{SERVER_NAME}}'
+        server_port: {{SERVER_PORT}}
+        script_path: /
+    extensions:
+        - phpbbmodders/knowledgebase
