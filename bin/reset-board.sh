@@ -7,7 +7,8 @@
 #
 # Usage: bin/reset-board.sh
 # Config (env vars, all optional):
-#   PHPBB_ROOT   phpBB source tree to install into (must contain install/)
+#   PHPBB_ROOT   phpBB source tree to install into; if missing or empty,
+#                the current 3.3.x release is downloaded into it first
 #   KB_EXT_SRC   knowledgebase extension checkout to symlink in
 #   SERVER_NAME  hostname the installer records for generated URLs
 #   SERVER_PORT  port the installer records for generated URLs
@@ -25,6 +26,33 @@ NGINX_SITE="${NGINX_SITE:-/etc/nginx/sites-available/phpbb-kb-test.conf}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Fresh machine or wiped folder: fetch the current phpBB 3.3.x release
+# (as reported by phpBB's own version feed) and unpack it into
+# PHPBB_ROOT. Only runs when PHPBB_ROOT is missing or completely empty,
+# so an existing board's files are never touched.
+if [ ! -d "$PHPBB_ROOT" ] || [ -z "$(ls -A "$PHPBB_ROOT")" ]; then
+	echo "==> $PHPBB_ROOT is missing or empty; downloading the current phpBB 3.3.x release"
+	phpbb_version="$(curl -fsSL --max-time 30 https://version.phpbb.com/phpbb/versions.json | jq -r '.stable["3.3"].current')"
+	if ! [[ "$phpbb_version" =~ ^3\.3\.[0-9]+$ ]]; then
+		echo "Couldn't read the current 3.3.x version from version.phpbb.com (got '$phpbb_version')." >&2
+		exit 1
+	fi
+	release_url="https://download.phpbb.com/pub/release/3.3/$phpbb_version/phpBB-$phpbb_version.zip"
+	DOWNLOAD_DIR="$(mktemp -d)"
+	trap 'rm -rf "$DOWNLOAD_DIR"' EXIT
+	curl -fsSL --max-time 300 -o "$DOWNLOAD_DIR/phpBB-$phpbb_version.zip" "$release_url"
+	curl -fsSL --max-time 30 -o "$DOWNLOAD_DIR/phpBB-$phpbb_version.zip.sha256" "$release_url.sha256"
+	(cd "$DOWNLOAD_DIR" && sha256sum -c --quiet "phpBB-$phpbb_version.zip.sha256")
+	# The zip holds a single top-level phpBB3/ folder; move its contents
+	# (dotfiles included) into PHPBB_ROOT.
+	unzip -q "$DOWNLOAD_DIR/phpBB-$phpbb_version.zip" -d "$DOWNLOAD_DIR"
+	mkdir -p "$PHPBB_ROOT"
+	(shopt -s dotglob && mv "$DOWNLOAD_DIR/phpBB3/"* "$PHPBB_ROOT/")
+	rm -rf "$DOWNLOAD_DIR"
+	trap - EXIT
+	echo "==> Extracted phpBB $phpbb_version into $PHPBB_ROOT"
+fi
 
 if [ -d "$PHPBB_ROOT/install.disabled" ] && [ ! -d "$PHPBB_ROOT/install" ]; then
 	echo "==> Restoring install/ (was renamed aside after the last run)"

@@ -21,6 +21,11 @@ path; see the comment in `reset-board.sh`), and runs
 `bin/seed-kb-fixtures.php` against the fresh install. Safe to re-run
 any time a clean slate is wanted.
 
+If `PHPBB_ROOT` doesn't exist or is empty, the script first downloads
+the current phpBB 3.3.x release (version taken from
+`version.phpbb.com`, zip checked against its published SHA-256) and
+unpacks it there. A folder that already has files in it is left alone.
+
 The board is served by the desktop's nginx site config
 `/etc/nginx/sites-available/phpbb-kb-test.conf` (port `:8092`), which
 isn't part of this repo. If its `root` isn't `PHPBB_ROOT` (for example
