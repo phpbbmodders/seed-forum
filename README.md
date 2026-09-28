@@ -13,7 +13,7 @@ bin/reset-board.sh
 ```
 
 This wipes and reinstalls the board pointed at by `PHPBB_ROOT`
-(default `/home/william/Desktop/repos/seeded-board`), bind-mounts in the
+(default `/home/william/Desktop/repos/seeded-board/kb`), bind-mounts in the
 extension checkout at `KB_EXT_SRC` (default
 `/home/william/Desktop/repos/knowledgebase` - a bind mount, not a
 symlink, since phpBB's asset URLs break under a symlinked extension

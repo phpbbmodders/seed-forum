@@ -18,7 +18,7 @@
 set -Eeuo pipefail
 
 #PHPBB_ROOT="${PHPBB_ROOT:-/home/william/Desktop/bak/phpBB3}"
-PHPBB_ROOT="${PHPBB_ROOT:-/home/william/Desktop/repos/seeded-board}"
+PHPBB_ROOT="${PHPBB_ROOT:-/home/william/Desktop/repos/seeded-board/kb}"
 KB_EXT_SRC="${KB_EXT_SRC:-/home/william/Desktop/repos/knowledgebase}"
 SERVER_NAME="${SERVER_NAME:-localhost}"
 SERVER_PORT="${SERVER_PORT:-8092}"
