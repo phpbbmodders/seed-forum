@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions, feature requests, and general discussion
+    url: https://github.com/phpbbmodders/seed-forum/discussions
+    about: For anything that is not a bug report, please use Discussions.

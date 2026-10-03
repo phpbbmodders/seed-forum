@@ -1,0 +1,58 @@
+# Runner configuration. Select with --config; local.yml is ignored by Git.
+# Variable names are arbitrary. Environment values override their defaults.
+variables:
+  # Dedicated disposable board; only --reset wipes its installation state.
+  PHPBB_ROOT: /home/william/Desktop/repos/seeded-board/kb
+
+  # Knowledgebase checkout; its Composer name determines the mount target.
+  KB_EXT_SRC: /home/william/Desktop/repos/knowledgebase
+
+  # Optional extension with no seed script: uncomment this and its entry below.
+  # HF_EXT_SRC: /home/william/Desktop/repos/holiday_flare
+
+  # Hostname recorded in generated board URLs during installation.
+  SERVER_NAME: localhost
+
+  # Port recorded by the installer; does not start a web server.
+  SERVER_PORT: '8092'
+
+  # Remove this variable and board.nginx_site to leave nginx unchanged.
+  NGINX_SITE: /etc/nginx/sites-available/phpbb-kb-test.conf
+
+board:
+  # Relative board/source paths resolve from this config directory.
+  root: ${PHPBB_ROOT}
+
+  # Installer URL settings; changing them affects the next reset.
+  server_name: ${SERVER_NAME}
+
+  # Reuse the configured port rather than assigning one per extension.
+  server_port: ${SERVER_PORT}
+
+  # Optional nginx site: --reset creates/enables it and updates root/host/port.
+  nginx_site: ${NGINX_SITE}
+
+  # Board-wide PHP seeds run first. Paths resolve from the tooling repository.
+  # Use [] for a KB-only board; --only excludes these board-wide scripts.
+  seeds:
+    - bin/seed-standard-fixtures.php
+
+# Config labels drive --only selection; extensions: {} gives a core-only board.
+# Optional styles are copied into board.root/styles and installed on reset.
+# Use styles: {} to keep only the board's existing styles.
+styles: {}
+
+extensions:
+  knowledgebase:
+    # Mount this checkout under ext/ using its Composer vendor/name.
+    source: ${KB_EXT_SRC}
+
+    # Run after board seeds with the installed board root as the first argument.
+    seeds:
+      - bin/seed-kb-fixtures.php
+
+  # Extension without fixtures. Uncomment this block and HF_EXT_SRC above.
+  # Keep seeds: [] at the same indentation as source; do not add a bare '-'.
+  # holiday_flare:
+  #   source: ${HF_EXT_SRC}
+  #   seeds: []
