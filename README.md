@@ -22,7 +22,7 @@ local, not internet-facing.
 
 ## Requirements
 
-- Linux with Bash and bind-mount support.
+- Linux with Bash, bind-mount support and `mountpoint` (util-linux).
 - Python 3.9 or newer with PyYAML.
 - PHP CLI compatible with the board, including SQLite support.
 - `jq`, `sqlite3`, `curl`, `unzip` and `sha256sum` for reset operations.

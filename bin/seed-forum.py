@@ -173,6 +173,16 @@ def package(source):
     return name
 
 
+def is_mounted(path):
+    """Detect mount points, including bind mounts on the same filesystem."""
+    if not Path(path).exists():
+        return False
+    result = subprocess.run(['mountpoint', '-q', '--', str(path)], check=False)
+    if result.returncode not in (0, 32):
+        fail(f"Cannot determine mount state: {path}")
+    return result.returncode == 0
+
+
 def managed(root):
     """Return recorded mount targets confined to root/ext plus the legacy mount.
 
@@ -196,7 +206,7 @@ def managed(root):
                 fail(f"Managed mount parent escapes board root: {target}")
             targets.append(target)
     legacy = root / "ext/phpbbmodders/knowledgebase"
-    if legacy not in targets and os.path.ismount(legacy):
+    if legacy not in targets and is_mounted(legacy):
         targets.append(legacy)
     return targets
 
@@ -273,7 +283,7 @@ def main():
             target = root / "styles" / label
             if not (source / "style.cfg").is_file():
                 fail(f"Missing style.cfg: {source}")
-            if target.is_symlink() or os.path.ismount(target) or not target.parent.resolve().is_relative_to(root):
+            if target.is_symlink() or is_mounted(target) or not target.parent.resolve().is_relative_to(root):
                 fail(f"Style target must be an ordinary directory inside the board: {target}")
             if source == target.resolve() or source.is_relative_to(target.resolve()) or target.resolve().is_relative_to(source):
                 fail(f"Style source and target must be separate directories: {source}")
@@ -329,10 +339,10 @@ def main():
             print(f"Style: {label}; source={style['source']}; default={style['default']}")
         for label, extension in extensions:
             name = extension["name"]
-            mounted = bool(name and os.path.ismount(root / "ext" / name))
+            mounted = bool(name and is_mounted(root / "ext" / name))
             print(f"{label}: {name or 'missing/invalid composer.json'}; source={extension['source']}; mounted={mounted}")
         for target in targets:
-            print(f"Managed: {target}; mounted={os.path.ismount(target)}")
+            print(f"Managed: {target}; mounted={is_mounted(target)}")
         if (root / "config.php").is_file():
             if args.dry_run:
                 run(['php', REPO / 'bin/extension-state.php', root], dry=True)
@@ -351,7 +361,7 @@ def main():
             fail(f'Nonempty reset directory is not a phpBB source tree: {root}')
     if args.mount:
         for _, extension in extensions:
-            if os.path.ismount(root / "ext" / extension["name"]):
+            if is_mounted(root / "ext" / extension["name"]):
                 fail(f"Already mounted: {extension['name']}; use --remount")
     if args.enable and not (args.mount or args.remount or args.reset):
         for _, extension in extensions:
@@ -402,7 +412,7 @@ def main():
         selected = {root / "ext" / ext["name"] for _, ext in extensions if ext["name"]}
         removing = targets if args.remount or not args.only else [target for target in targets if target in selected]
         for target in removing:
-            if os.path.ismount(target):
+            if is_mounted(target):
                 run(["sudo", "umount", target], dry=args.dry_run)
             targets = [entry for entry in targets if entry != target]
             if not args.dry_run:
@@ -414,7 +424,7 @@ def main():
         for label, extension in extensions:
             source = extension["source"]
             target = root / "ext" / extension["name"]
-            if os.path.ismount(target) and not args.dry_run:
+            if is_mounted(target) and not args.dry_run:
                 fail(f"Already mounted: {target}")
             if target.is_symlink():
                 run(["rm", "--", target], dry=args.dry_run)
