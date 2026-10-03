@@ -1,0 +1,23 @@
+name: Bug report
+description: Report a problem with board tooling.
+labels: [bug]
+body:
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include the command and configuration with passwords removed.
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: OS, PHP and phpBB versions
+    validations:
+      required: true

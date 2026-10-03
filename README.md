@@ -1,81 +1,264 @@
 # seed-forum
 
-Rebuilds a disposable local phpBB 3.3.x test board (SQLite, no external
-DB service) with the [`phpbbmodders/knowledgebase`](https://github.com/phpbbmodders/knowledgebase)
-extension enabled and seeded with fixture data, so the extension's
-front end can be clicked through by hand after a change instead of
-relying on lint/read-through alone.
+## License
 
-## Usage
+Licensed under the GNU General Public License v2.0. See [LICENSE](LICENSE).
+
+Manage a disposable local phpBB 3.3.x board using SQLite. Configure local
+extensions and their seed scripts in YAML. Mount extensions, change their
+enabled state, seed fixtures, or purge cache independently of resetting.
+
+## Quick Start
+
+Only `--reset` wipes and reinstalls the board. Running without an operation
+prints help.
 
 ```bash
-bin/reset-board.sh
+bin/reset-board.sh --validate
+bin/reset-board.sh --reset --dry-run
+bin/reset-board.sh --reset
 ```
 
-This wipes and reinstalls the board pointed at by `PHPBB_ROOT`
-(default `/home/william/Desktop/repos/seeded-board/kb`), bind-mounts in the
-extension checkout at `KB_EXT_SRC` (default
-`/home/william/Desktop/repos/knowledgebase` - a bind mount, not a
-symlink, since phpBB's asset URLs break under a symlinked extension
-path; see the comment in `reset-board.sh`), and runs
-`bin/seed-kb-fixtures.php` against the fresh install. Safe to re-run
-any time a clean slate is wanted.
+The default config is `config/local.yml`, ignored by Git. A local config
+is present in this checkout. `config/local.yml.example` is the committed
+example; use it as the starting point in a fresh checkout. Select another
+config with `--config FILE`.
 
-If `PHPBB_ROOT` doesn't exist or is empty, the script first downloads
-the current phpBB 3.3.x release (version taken from
-`version.phpbb.com`, zip checked against its published SHA-256) and
-unpacks it there. A folder that already has files in it is left alone.
+## Configuration
 
-The board is served by the desktop's nginx site config
-`/etc/nginx/sites-available/phpbb-kb-test.conf` (port `:8092`), which
-isn't part of this repo. If its `root` isn't `PHPBB_ROOT` (for example
-after the board moved to a different folder), `reset-board.sh` updates
-it and restarts nginx; if `nginx -t` rejects the change, the old config
-is put back. Set `NGINX_SITE` to use a different site config.
+```yaml
+variables:
+  TEST_BOARD: /home/william/Desktop/repos/seeded-board/kb
+  KB_CHECKOUT: /home/william/Desktop/repos/knowledgebase
+  SFS_CHECKOUT: /home/william/Desktop/repos/sfscompanion
 
-### What gets seeded
+board:
+  root: ${TEST_BOARD}
+  server_name: localhost
+  server_port: '8092'
+  seeds:
+    - bin/seed-standard-fixtures.php
 
-- Two forums: a public "Knowledge Base Comments" forum and a
-  moderator-only "Knowledge Base Changelog" forum, wired up via the
-  extension's own config keys.
-- Four users, all with password `KbTest1234!`: `kb_author1`,
-  `kb_author2`, `kb_moderator` (granted `a_manage_kb`), and `kb_reader`
-  - a plain REGISTERED member with `u_kb_view` but no submit/edit
-  rights, for checking view-only access actually stays view-only.
-- Two groups: `KB Team` (`kb_moderator` + `kb_author2` - assignable
-  reviewer/group-author status) and `KB Contributors` (`kb_author1` +
-  `kb_author2` + `kb_moderator` - holds the category-level
-  `kb_u_add`/`kb_u_edit`/`kb_u_delete` grants). `kb_reader` is
-  deliberately in neither.
-- Two nested KB categories (`Getting Started` > `Advanced Topics`).
-- Four articles covering: a plain single-author article, a
-  multi-author article (user co-author + group co-author), an
-  unapproved group-authored article (for the moderation queue), and an
-  active article with a pending revision (for edit-conflict locking).
+extensions:
+  knowledgebase:
+    source: ${KB_CHECKOUT}
+    seeds:
+      - bin/seed-kb-fixtures.php
+  sfscompanion:
+    source: ${SFS_CHECKOUT}
+    seeds: []
+```
 
-Admin login: `admin` / `KbTest1234!`.
+Variable names and extension labels are chosen in the config. Environment
+variables override the configured variable defaults. `${NAME}` references
+can refer to other variables. Undefined references, cycles, duplicate
+keys, and unknown fields are rejected. No shell commands are evaluated.
+
+Each checkout's `composer.json` name determines its mount under
+`board.root/ext/vendor/name` and its phpBB extension name. Add extensions
+as config entries; positional checkout arguments are no longer supported.
+
+Relative board/source paths resolve from the config directory. Seed paths
+resolve from this tooling repository; absolute paths also work. Each seed
+is a PHP CLI script receiving the board root as its first argument. Board
+seeds run first, then extension seeds in config order.
+
+The committed example runs both standard and Knowledgebase seeds. For a
+standard-only board, use `extensions: {}`. For a KB-only board, use
+`board.seeds: []` and keep the Knowledgebase entry.
+
+The example defaults to `/home/william/Desktop/repos/seeded-board/kb` on
+port `8092`. Optional `board.nginx_site` selects a local nginx config.
+When configured, reset creates a missing site, enables it with a
+`sites-enabled` symlink, and sets its root, hostname, and listen port
+from the board settings. Existing sites keep their other directives
+and listener addresses. The site path must be under `sites-available`,
+with one server block per board. Omit this field to leave nginx alone.
+
+New sites listen on localhost IPv4 and IPv6. They use the detected
+PHP-FPM socket; set the `PHP_FPM_SOCKET` environment variable if multiple
+PHP versions are installed. Before reloading, the script runs `nginx -t`.
+It restores the previous file and enabled-link state if validation or
+reload fails. An inactive nginx service is started when setup succeeds.
+
+`server_port` sets phpBB's generated URLs and, when `nginx_site` is
+configured, the site's listen port. For example, this config creates
+and serves the bare board on `localhost:8093` during reset:
+
+```yaml
+board:
+  root: /home/william/Desktop/repos/seeded-board/bare
+  server_name: localhost
+  server_port: '8093'
+  nginx_site: /etc/nginx/sites-available/phpbb-bare.conf
+  seeds:
+    - bin/seed-standard-fixtures.php
+extensions: {}
+```
+
+The bare site is already installed and enabled on this machine; no
+database reset is needed to access the existing board.
+
+## Styles
+
+Add local styles by directory name. Their parent style must already be installed
+(prosilver is installed with the board). For example:
+
+```yaml
+styles:
+  ProMinoDeux:
+    source: /home/william/Desktop/repos/ProMinoDeux
+    default: true
+```
+
+Use `styles: {}` when no custom styles are needed. Reset copies and installs
+configured styles even with `--skip-seed`. To install or refresh them on an
+existing board without resetting its data:
+
+```bash
+bin/reset-board.sh --config config/bare.yml --install-styles
+```
+
+Only one entry may set `default: true`. Users using the previous board default
+move to the new default; other style choices are preserved. Styles are copied,
+so rerun `--install-styles` after editing the source. The command purges cache.
+
+## Options
+
+| Option | Behavior |
+| --- | --- |
+| `--config FILE` | Select YAML configuration; defaults to `config/local.yml`. |
+| `--reset` | Wipe/reinstall, mount and enable selected extensions, then seed. |
+| `--mount` | Add selected mounts while retaining existing managed mounts. Already mounted targets are rejected. |
+| `--remount` | Replace the full managed mount set with the selected extensions. |
+| `--unmount` | Remove all managed mounts, or only those selected by `--only`. |
+| `--enable` | Enable selected extensions through phpBB CLI. |
+| `--disable` | Disable selected extensions through phpBB CLI without purging their data. |
+| `--seed-only` | Run seeds on an existing board, with repeat protection. |
+| `--install-styles` | Copy/install configured styles and select the default without resetting data. |
+| `--skip-seed` | Skip all seeds during reset. |
+| `--purge-cache` | Purge phpBB cache independently or after other operations. |
+| `--only LABELS` | Select comma-separated extension config labels; excludes board seeds. |
+| `--dry-run` | Validate and print the selected operation without executing it. |
+| `--status` | Show the board root, configured port/URL, sources, mount state, and enabled/disabled extensions. |
+| `--validate` | Check config, sources, package names, and seed PHP syntax. No installed board needed. |
+| `--help` | Show command help. |
+
+Supply an operation with `--dry-run`. Choose only one of reset, mount,
+remount, or unmount. Enable and disable cannot be combined. `--skip-seed`
+requires reset. Status and validation cannot accompany changes.
+
+Commands run in this order: disable, unmount/remount, mount, enable,
+seed, then purge cache. Reset performs its own mount and enable steps.
+Disabling precedes unmounting regardless of argument order.
+
+```bash
+bin/reset-board.sh --config config/local.yml --mount --enable --only sfscompanion
+bin/reset-board.sh --remount --purge-cache
+bin/reset-board.sh --purge-cache
+bin/reset-board.sh --disable --unmount --only sfscompanion
+bin/reset-board.sh --seed-only --only knowledgebase
+bin/reset-board.sh --reset --skip-seed
+bin/reset-board.sh --status
+```
+
+The sfscompanion examples require that entry in your config. `--only`
+uses config labels, not Composer names. With remount it replaces the
+entire managed mount set with the selection. With unmount it removes
+only the selection. Mounting does not enable extensions; combine with
+`--enable` when needed. Disable extensions before unmounting if you plan
+to continue using the board without them.
+
+Status reports the configured port and URL; it does not test whether a web
+server is listening there. Apply nginx setting changes with `--reset`.
+
+phpBB's cache purge clears cached data, templates, the container, and
+routes, and increments the asset version. It does not empty a separate
+extension cache directory or restart PHP to clear OPcache.
+
+## Seed Protection And Mount Records
+
+Seed attempts are recorded in `.seed-forum-seeds.json` under the board
+root. A lock prevents simultaneous seed execution. Completed, failed,
+or interrupted seed attempts cannot be repeated; reset starts a new
+ledger. Failed seeds may leave partial data and are not rolled back.
+Extensions with seeds must be enabled before using `--seed-only`, or
+enabled in the same command with `--enable`.
+
+Calling a seed script directly bypasses the ledger. Boards seeded before
+the ledger existed should be reset before using `--seed-only`. The
+standard and KB scripts also reject their existing fixture forums.
+
+Mounts use bind mounts because symlinks can break phpBB asset URLs.
+`.seed-forum-mounted-extensions` records managed targets under the board
+root. `.seed-forum-extension-names.json` remembers label/package mappings
+so selected unmounts can work after a checkout disappears. The legacy
+Knowledgebase mount is also recognized. Unmounting preserves source
+checkouts and board data. Failed unmounts retain remaining mount records
+for retry.
+
+## Fixtures
+
+Standard fixtures use phpBB's forum, user, group, permission, and posting
+APIs. They include two categories, three public forums, a nested project
+forum, a private staff forum, two custom groups, 12 topics, and 30 replies.
+Reference Library is read-only for ordinary members. Topic states include
+sticky, announcement, and locked; content includes quotes, lists, links,
+and code blocks.
+
+Standard users are `forum_alex`, `forum_blair`, `forum_casey`, `forum_drew`,
+and `forum_moderator`. The first four are members; the last has staff
+access and moderation permissions.
+
+Knowledgebase fixtures include public comments and private changelog
+forums; `kb_author1`, `kb_author2`, `kb_moderator`, and `kb_reader`; KB Team
+and KB Contributors groups; three categories; and 11 articles covering
+approvals, revisions, co-authorship, redirects, tags, comments, and private
+drafts. `kb_reader` has view-only KB access. KB seeding preserves unrelated
+forum permissions.
+
+All fixture users use `KbTest1234!`. Installer admin credentials are
+`admin` / `KbTest1234!`, intended for disposable local boards.
+
+## Requirements And Checks
+
+Requires Bash, Python 3.9+ with PyYAML (`python3-yaml`), and PHP compatible
+with the board. Reset also uses `jq`, `sqlite3`, `curl`, `unzip`, and
+`sha256sum`. Mount/unmount and web-group permission repairs use `sudo`.
+The permission setup assumes the local web group is `www-data`; cache
+permissions are repaired after enable, disable, seed, and purge commands.
+
+If the board directory is missing or empty, reset downloads the current
+phpBB 3.3.x release and verifies its published SHA-256. Existing phpBB
+source trees are reused. Nonempty directories that are not phpBB trees
+are rejected. Mount, remount, enable, disable, seed, and cache commands
+require an installed board. Unmount requires an existing board directory.
+
+```bash
+python3 -m unittest discover -s tests -v
+bash -n bin/reset-board.sh
+bash -n bin/rebuild-board.sh
+bin/reset-board.sh --validate
+```
 
 ## Layout
 
-- `bin/reset-board.sh` - the entry point; wipes, reinstalls, seeds.
-- `bin/seed-kb-fixtures.php` - bootstraps phpBB's container directly
-  (same pattern as `bin/phpbbcli.php`) and creates the fixtures above
-  using phpBB's and the extension's own APIs (`update_forum_data()`,
-  `user_add()`, `group_create()`, `update_category_data()`,
-  `set_co_authors()`, `save_article_revision()`) rather than hand-built
-  SQL, so seeded data goes through the same validation/side-effects a
-  real submission would.
-- `config/install.yml.example` - the phpBB CLI installer config
-  template (`{{PHPBB_ROOT}}`/`{{SERVER_NAME}}`/`{{SERVER_PORT}}`
-  placeholders filled in by `reset-board.sh`).
-
-## Future direction
-
-Seeding is currently scoped to what the knowledgebase extension's
-authorship/revision features need to be exercised by hand. A more
-general "standard forum" seed - multiple plain phpBB forums, several
-users/groups, topics and replies, independent of the KB extension - is
-a planned follow-up, not yet built.
+- `bin/reset-board.sh`: public command entry point.
+- `bin/seed-forum.py`: config parsing, validation, selection, and operations.
+- `bin/rebuild-board.sh`: internal reset backend.
+- `bin/build-install-config.py`: builds installer YAML from the template.
+- `bin/nginx-site.py`: creates/enables or updates a board site with rollback.
+- `bin/run-seed.php`: seed ledger and execution lock.
+- `bin/seed-bootstrap.php`: shared phpBB bootstrap for standard fixtures and state checks.
+- `bin/seed-standard-fixtures.php`: core forum fixtures, independent of KB.
+- `bin/seed-kb-fixtures.php`: Knowledgebase-specific fixtures.
+- `bin/extension-state.php`: reads enabled/disabled extension state.
+- `config/local.yml.example`: example runner configuration.
+- `config/install.yml.example`: phpBB installer settings template.
+- `config/nginx-site.conf.example`: template for new nginx board sites.
+- `config/phpbb-bare.conf`: concrete localhost:8093 bare-board site example.
+- `tests/test_runner.py`: command and config regression tests.
+- `tests/test_nginx_site.py`: site creation, updates, and rollback checks.
 
 ## License
 

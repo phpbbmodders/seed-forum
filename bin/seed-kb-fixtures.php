@@ -1,11 +1,12 @@
 <?php
 /**
- * Seeds a freshly-installed phpBB board (see reset-board.sh) with enough
- * data to exercise the knowledgebase extension's authorship/revision
- * feature set by hand: a comments forum, a moderator-only changelog
- * forum, a few users and a team group, two KB categories, and four
- * articles covering the different statuses, co-authorship, and a
- * pending revision.
+ * Seed an installed board with the Knowledgebase extension enabled.
+ *
+ * Input: phpBB board root as the first argument. Create public comments and
+ * private changelog forums, four users, two groups, three KB categories, and
+ * eleven articles covering approvals, revisions, co-authorship, redirects,
+ * tags, comments, and private drafts. Print created IDs and login guidance.
+ * Reject existing fixture forums. Use the runner for seed-ledger protection.
  *
  * Usage: php seed-kb-fixtures.php /path/to/phpBB/root
  */
@@ -92,6 +93,15 @@ $user->data['user_permissions'] = '';
 $user->data['user_ip'] = '127.0.0.1';
 $user->ip = '127.0.0.1';
 $user->lang = [];
+
+$result = $db->sql_query('SELECT forum_id FROM ' . FORUMS_TABLE . " WHERE forum_name IN ('Knowledge Base Comments', 'Knowledge Base Changelog')");
+$existing_fixture = $db->sql_fetchrow($result);
+$db->sql_freeresult($result);
+if ($existing_fixture)
+{
+	fwrite(STDERR, "Knowledgebase fixture forums already exist; reset before seeding again.\n");
+	exit(1);
+}
 
 echo "Seeding as admin (user_id {$user->data['user_id']})...\n";
 
@@ -349,10 +359,9 @@ $auth_admin->acl_set('group', $changelog_forum_id, $standard_groups['ADMINISTRAT
 // time: the interactive installer assigns ROLE_FORUM_STANDARD to
 // REGISTERED for every default forum it creates - the CLI installer
 // creates "Your first forum" but never grants REGISTERED anything in
-// it. Applied to every forum that exists EXCEPT the moderator-only
-// changelog forum (explicitly excluded - a blanket "every forum" grant
-// would otherwise open that forum's contents to every member).
-$sql = 'SELECT forum_id FROM ' . FORUMS_TABLE . ' WHERE forum_id <> ' . (int) $changelog_forum_id;
+// it. Limit this repair to the installer defaults and KB comments:
+// other seed scripts may have created private or read-only forums.
+$sql = 'SELECT forum_id FROM ' . FORUMS_TABLE . " WHERE forum_name IN ('Your first category', 'Your first forum') OR forum_id = " . (int) $announce_forum_id;
 $result = $db->sql_query($sql);
 $all_forum_ids = [];
 while ($row = $db->sql_fetchrow($result))
@@ -387,10 +396,24 @@ $getting_started = ['category_name' => 'Getting Started', 'parent_id' => 0];
 $acp->update_category_data($getting_started, 0);
 $getting_started_id = (int) $getting_started['category_id'];
 
-$advanced_topics = ['category_name' => 'Advanced Topics', 'parent_id' => $getting_started_id];
+// default_team_id set here (not on Getting Started) so the two root
+// categories differ - Reference exercises a category with no default
+// team (assigned_team_id must be set explicitly, or the queue's
+// "effective team" falls through to none), Advanced Topics below
+// exercises the fallback itself.
+$reference = ['category_name' => 'Reference', 'parent_id' => 0];
+$acp->update_category_data($reference, 0);
+$reference_id = (int) $reference['category_id'];
+
+// Second root-level category (a sibling of Getting Started, not nested
+// under it) - both to have somewhere else to test "move to category"
+// with, and because the root-level "new category always nested under
+// the first one" bug this fixture setup would have silently matched
+// before it was fixed.
+$advanced_topics = ['category_name' => 'Advanced Topics', 'parent_id' => $getting_started_id, 'default_team_id' => $team_group_id];
 $acp->update_category_data($advanced_topics, 0);
 $advanced_topics_id = (int) $advanced_topics['category_id'];
-echo "    Getting Started (id={$getting_started_id}), Advanced Topics (id={$advanced_topics_id})\n";
+echo "    Getting Started (id={$getting_started_id}), Advanced Topics (id={$advanced_topics_id}, default team=KB Team), Reference (id={$reference_id})\n";
 
 // update_category_data() with copy_perm_from_id=0 (nothing to copy
 // from - these are the first categories on the board) leaves these
@@ -412,7 +435,7 @@ while ($row = $db->sql_fetchrow($result))
 $db->sql_freeresult($result);
 
 $kb_groups_table = $phpbb_container->getParameter('tables.kb_groups_table');
-foreach ([$getting_started_id, $advanced_topics_id] as $category_id)
+foreach ([$getting_started_id, $advanced_topics_id, $reference_id] as $category_id)
 {
 	foreach (['kb_u_add', 'kb_u_edit', 'kb_u_delete'] as $option_name)
 	{
@@ -564,12 +587,122 @@ $kb->save_article_revision($article7_id, [
 	'bbcode_bitfield'      => '',
 ], $author2_id);
 
-echo "    article_id={$article1_id} Welcome to the Knowledge Base (active)\n";
+// 8. Redirect entry - approved and active, so it shows up in the public
+// listing immediately (a redirect never needs a pending-revision cycle
+// the way a text article does).
+$article8_id = seed_create_article($articles_table, [
+	'article_category_id' => $getting_started_id,
+	'approved'             => 1,
+	'status'               => \phpbbmodders\knowledgebase\inc\functions_kb::STATUS_ACTIVE,
+	'article_title'        => 'phpBB Official Site',
+	'article_description'  => 'External link, used to exercise redirect entries.',
+	'article_body'         => '',
+	'is_redirect'          => 1,
+	'redirect_url'         => 'https://www.phpbb.com/',
+	'author_id'             => $author1_id,
+	'author'                => 'kb_author1',
+	'author_type'           => \phpbbmodders\knowledgebase\inc\functions_kb::AUTHOR_TYPE_USER,
+]);
+
+// 9. Tagged with the "phpBB Version: 3.3.x" custom field seeded by the
+// extension's own version_2_0_5 migration - exercises the field filter
+// on the category listing page without this script needing to define a
+// field of its own.
+$article9_id = seed_create_article($articles_table, [
+	'article_category_id' => $getting_started_id,
+	'approved'             => 1,
+	'status'               => \phpbbmodders\knowledgebase\inc\functions_kb::STATUS_ACTIVE,
+	'article_title'        => 'Upgrading Between Versions',
+	'article_description'  => 'Tagged with a phpBB Version custom field value.',
+	'article_body'         => 'This is a seeded article tagged with a custom field value, used to exercise the field filter.',
+	'author_id'             => $author2_id,
+	'author'                => 'kb_author2',
+	'author_type'           => \phpbbmodders\knowledgebase\inc\functions_kb::AUTHOR_TYPE_USER,
+]);
+$sql = 'SELECT value_id FROM ' . $kb->get_field_values_table() . " WHERE value_label = '3.3.x'";
+$result = $db->sql_query($sql);
+$phpbb_version_value_id = (int) $db->sql_fetchfield('value_id');
+$db->sql_freeresult($result);
+if ($phpbb_version_value_id)
+{
+	$sql = 'INSERT INTO ' . $kb->get_article_field_values_table() . ' (article_id, value_id)
+		VALUES (' . $article9_id . ', ' . $phpbb_version_value_id . ')';
+	$db->sql_query($sql);
+}
+
+// 10. Real topic_id article - exercises the "View topic" moderator
+// action, which only appears once an article actually has a comments
+// topic. submit_post() (called by submit_article() below) needs a
+// fully-loaded $user->data, not the pared-down one this script sets up
+// for everything above it - it reads is_registered/user_colour/etc, and
+// a NOT NULL constraint fails on topic_first_poster_colour without a
+// real user_colour. Loaded here, right before the one call that needs
+// it, rather than for the whole script.
+require_once($phpbb_root_path . 'includes/functions_posting.' . $phpEx);
+$sql = 'SELECT * FROM ' . USERS_TABLE . ' WHERE user_id = ' . (int) $admin_row['user_id'];
+$result = $db->sql_query($sql);
+$full_admin_row = $db->sql_fetchrow($result);
+$db->sql_freeresult($result);
+$user->data = array_merge($user->data, $full_admin_row, ['is_registered' => true]);
+
+$article10_id = seed_create_article($articles_table, [
+	'article_category_id' => $getting_started_id,
+	'approved'             => 1,
+	'status'               => \phpbbmodders\knowledgebase\inc\functions_kb::STATUS_ACTIVE,
+	'article_title'        => 'Article With a Real Comments Topic',
+	'article_description'  => 'Has a real topic_id, for the View Topic action.',
+	'article_body'         => 'This is a seeded article with a real comments topic, used to exercise the View Topic moderator action.',
+	'author_id'             => $author1_id,
+	'author'                => 'kb_author1',
+	'author_type'           => \phpbbmodders\knowledgebase\inc\functions_kb::AUTHOR_TYPE_USER,
+]);
+$kb->submit_article($getting_started_id, $announce_forum_id, 'Article With a Real Comments Topic', 'Has a real topic_id, for the View Topic action.', 'kb_author1', 'Getting Started', $article10_id);
+
+// 11. Draft - never submitted, visible only to its author. Credited to
+// kb_author1 (the account these fixtures are meant to be explored as)
+// specifically so it's immediately visible on the Manage Your Articles
+// tab in the web UI after logging in as kb_author1, rather than
+// something that only shows up if you already know to look for it.
+$article11_id = seed_create_article($articles_table, [
+	'article_category_id' => $getting_started_id,
+	'approved'             => 0,
+	'status'               => \phpbbmodders\knowledgebase\inc\functions_kb::STATUS_DRAFT,
+	'article_title'        => 'Unfinished Draft Article',
+	'article_description'  => 'Still being written.',
+	'article_body'         => 'This is a seeded draft, never submitted - visible only to kb_author1 on Manage Your Articles, not to moderators or in any public listing.',
+	'author_id'             => $author1_id,
+	'author'                => 'kb_author1',
+	'author_type'           => \phpbbmodders\knowledgebase\inc\functions_kb::AUTHOR_TYPE_USER,
+]);
+
+// 12. Draft-of-an-edit on an already-live article - kept entirely
+// separate from a real pending revision (see the Performance Tuning
+// article above, which already has one), exercised via the extension's
+// own API rather than a hand-built row, same as save_article_revision()
+// above.
+$kb->save_article_draft_edit($article1_id, [
+	'article_title'       => 'Welcome to the Knowledge Base',
+	'article_description' => 'Start here.',
+	'article_body'         => 'This is a seeded draft-of-an-edit for the Welcome article, awaiting kb_author1 to either finish and submit it or leave it as-is.',
+	'bbcode_uid'           => '',
+	'bbcode_bitfield'      => '',
+	'redirect_url'         => '',
+], $author1_id);
+
+echo "    article_id={$article1_id} Welcome to the Knowledge Base (active, has a private draft-of-an-edit)\n";
 echo "    article_id={$article2_id} Installing the Board (active, co-authored)\n";
 echo "    article_id={$article3_id} Extending via Events (pending approval, group-authored)\n";
 echo "    article_id={$article4_id} Performance Tuning (active, pending revision)\n";
 echo "    article_id={$article5_id} Troubleshooting Common Errors (pending approval)\n";
 echo "    article_id={$article6_id} Backup and Restore (active, pending revision)\n";
 echo "    article_id={$article7_id} Securing Your Installation (active, pending revision)\n";
+echo "    article_id={$article8_id} phpBB Official Site (active, redirect entry)\n";
+echo "    article_id={$article9_id} Upgrading Between Versions (active, tagged phpBB Version: 3.3.x)\n";
+echo "    article_id={$article10_id} Article With a Real Comments Topic (active, real topic_id)\n";
+echo "    article_id={$article11_id} Unfinished Draft Article (DRAFT - private to kb_author1)\n";
 
-echo "\nDone. Log in as kb_moderator / KbTest1234! to see the Administration queue, kb_author1/kb_author2 for the author side, or kb_reader (same password) to check view-only access.\n";
+echo "\nDone. Log in as kb_author1 / KbTest1234! and open the \"Manage Your Articles\" tab to see the\n";
+echo "seeded draft (and the Welcome article's separate draft-of-an-edit, visible when you edit it) in\n";
+echo "the actual web UI - both are deliberately invisible to kb_moderator and everywhere else. Log in\n";
+echo "as kb_moderator / KbTest1234! to see the Administration queue, kb_author1/kb_author2 for the\n";
+echo "author side, or kb_reader (same password) to check view-only access.\n";

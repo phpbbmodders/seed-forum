@@ -1,12 +1,17 @@
+# Internal phpBB installer template, not the --config runner configuration.
+# build-install-config.py replaces placeholders through parsed YAML fields
+# and writes the final document to stdout for the reset backend.
 installer:
+    # Disposable-board credentials; fixture scripts use this admin identity.
     admin:
         name: admin
         password: KbTest1234!
         email: admin@example.org
     board:
         lang: en
-        name: Knowledge Base Test
-        description: Local test board for the knowledgebase extension
+        name: phpBB Test Board
+        description: Local board for forum and extension fixtures
+    # Both SQLite path fields resolve to the database inside the board root.
     database:
         dbms: sqlite3
         dbhost: {{PHPBB_ROOT}}/store/sqlite.db
@@ -15,8 +20,10 @@ installer:
         dbpasswd: null
         dbname: {{PHPBB_ROOT}}/store/sqlite.db
         table_prefix: phpbb_
+    # Fixture users and posts should not send real notification mail.
     email:
         enabled: false
+    # Hostname and port come from the runner config during reset.
     server:
         cookie_secure: false
         server_protocol: 'http://'
@@ -24,5 +31,6 @@ installer:
         server_name: '{{SERVER_NAME}}'
         server_port: {{SERVER_PORT}}
         script_path: /
+    # The selected Composer package names become a YAML list; [] means none.
     extensions:
-        - phpbbmodders/knowledgebase
+{{EXTENSIONS_YAML}}
