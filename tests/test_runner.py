@@ -68,10 +68,31 @@ class RunnerTests(unittest.TestCase):
             if str(argv[0]) == 'sudo' and argv[1] == 'mount':
                 mounts.add(Path(argv[-1]))
 
-        with patch.object(sys, 'argv', ['runner', '--config', str(self.config), *args]), patch.object(runner, 'run', side_effect=action), patch.object(runner.os.path, 'ismount', side_effect=lambda path: Path(path) in mounts), patch.object(runner.shutil, 'which', return_value='/usr/bin/tool'), contextlib.redirect_stdout(io.StringIO()):
+        with patch.object(sys, 'argv', ['runner', '--config', str(self.config), *args]), patch.object(runner, 'run', side_effect=action), patch.object(runner, 'is_mounted', side_effect=lambda path: Path(path) in mounts), patch.object(runner.shutil, 'which', return_value='/usr/bin/tool'), contextlib.redirect_stdout(io.StringIO()):
             runner.main()
         self.assertEqual((self.root / 'config.php').read_text(), 'database must survive')
         return actions
+
+    def test_mount_detection_uses_mountpoint_for_same_filesystem_bind(self):
+        target = self.root / 'ext/vendor/first'
+        target.mkdir(parents=True)
+        with patch.object(runner.subprocess, 'run', return_value=runner.subprocess.CompletedProcess([], 0)) as probe, patch.object(runner.os.path, 'ismount', return_value=False):
+            self.assertTrue(runner.is_mounted(target))
+        probe.assert_called_once_with(['mountpoint', '-q', '--', str(target)], check=False)
+
+    def test_mount_detection_reports_unmounted_target(self):
+        with patch.object(runner.subprocess, 'run', return_value=runner.subprocess.CompletedProcess([], 32)):
+            self.assertFalse(runner.is_mounted(self.root))
+
+    def test_mount_detection_fails_closed_on_probe_error(self):
+        with patch.object(runner.subprocess, 'run', return_value=runner.subprocess.CompletedProcess([], 1)):
+            with self.assertRaisesRegex(ValueError, 'Cannot determine mount state'):
+                runner.is_mounted(self.root)
+
+    def test_missing_mount_target_does_not_run_probe(self):
+        with patch.object(runner.subprocess, 'run') as probe:
+            self.assertFalse(runner.is_mounted(self.root / 'missing'))
+        probe.assert_not_called()
 
     def test_no_operation_never_loads_config(self):
         with patch.object(sys, 'argv', ['runner']), patch.object(runner, 'load_config') as load, contextlib.redirect_stdout(io.StringIO()):
