@@ -20,7 +20,7 @@ extensions:
 styles:
   prosilver_se_revolution:
     source: ${prosilver_se_revolution_SRC}
-    default: true
+    default: false
   ProMinoDeux:
     source: ${ProMinoDeux_SRC}
-    default: false
+    default: true

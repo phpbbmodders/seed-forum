@@ -392,7 +392,7 @@ echo "==> KB categories\n";
 /** @var \phpbbmodders\knowledgebase\controller\acp_controller $acp */
 $acp = $phpbb_container->get('phpbbmodders.knowledgebase.controller.acp');
 
-$getting_started = ['category_name' => 'Getting Started', 'parent_id' => 0];
+$getting_started = ['category_name' => 'Getting Started', 'parent_id' => 0, 'category_parents' => ''];
 $acp->update_category_data($getting_started, 0);
 $getting_started_id = (int) $getting_started['category_id'];
 
@@ -401,7 +401,7 @@ $getting_started_id = (int) $getting_started['category_id'];
 // team (assigned_team_id must be set explicitly, or the queue's
 // "effective team" falls through to none), Advanced Topics below
 // exercises the fallback itself.
-$reference = ['category_name' => 'Reference', 'parent_id' => 0];
+$reference = ['category_name' => 'Reference', 'parent_id' => 0, 'category_parents' => ''];
 $acp->update_category_data($reference, 0);
 $reference_id = (int) $reference['category_id'];
 
@@ -410,7 +410,7 @@ $reference_id = (int) $reference['category_id'];
 // with, and because the root-level "new category always nested under
 // the first one" bug this fixture setup would have silently matched
 // before it was fixed.
-$advanced_topics = ['category_name' => 'Advanced Topics', 'parent_id' => $getting_started_id, 'default_team_id' => $team_group_id];
+$advanced_topics = ['category_name' => 'Advanced Topics', 'parent_id' => $getting_started_id, 'default_team_id' => $team_group_id, 'category_parents' => ''];
 $acp->update_category_data($advanced_topics, 0);
 $advanced_topics_id = (int) $advanced_topics['category_id'];
 echo "    Getting Started (id={$getting_started_id}), Advanced Topics (id={$advanced_topics_id}, default team=KB Team), Reference (id={$reference_id})\n";
