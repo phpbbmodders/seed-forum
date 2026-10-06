@@ -211,9 +211,12 @@ access and moderation permissions.
 
 Knowledgebase fixtures include public comments and private changelog
 forums; `kb_author1`, `kb_author2`, `kb_moderator`, and `kb_reader`; KB Team
-and KB Contributors groups; three categories; and 11 articles covering
-approvals, revisions, co-authorship, redirects, tags, comments, and private
-drafts. `kb_reader` has view-only KB access. KB seeding preserves unrelated
+and KB Contributors groups; three categories; 11 hand-built articles
+covering approvals, revisions, co-authorship, redirects, tags, comments, and
+private drafts; and 72 generated "Bulk NN - kind" articles (pending approval,
+reviewed, active, pending revision, inactive and redirect, spread over all three
+categories, half assigned to KB Team) so listings and the Administration queue
+run to several pages of ten. `kb_reader` has view-only KB access. KB seeding preserves unrelated
 forum permissions.
 
 All fixture users use `KbTest1234!`. Installer admin credentials are
