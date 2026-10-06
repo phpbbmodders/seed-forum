@@ -3,9 +3,11 @@
  * Seed an installed board with the Knowledgebase extension enabled.
  *
  * Input: phpBB board root as the first argument. Create public comments and
- * private changelog forums, four users, two groups, three KB categories, and
- * eleven articles covering approvals, revisions, co-authorship, redirects,
- * tags, comments, and private drafts. Print created IDs and login guidance.
+ * private changelog forums, four users, two groups, three KB categories,
+ * eleven hand-built articles covering approvals, revisions, co-authorship,
+ * redirects, tags, comments, and private drafts, plus a block of bulk
+ * articles so every listing and every Administration queue choice runs to
+ * several pages. Print created IDs and login guidance.
  * Reject existing fixture forums. Use the runner for seed-ledger protection.
  *
  * Usage: php seed-kb-fixtures.php /path/to/phpBB/root
@@ -689,6 +691,97 @@ $kb->save_article_draft_edit($article1_id, [
 	'redirect_url'         => '',
 ], $author1_id);
 
+// 13+. Bulk articles - enough of every kind that each Administration queue
+// choice (needs attention, everything, redirects, inactive, one team, one
+// team including active) and each category listing runs past one page of ten.
+// They are generated in blocks of six, one block per category and team
+// assignment, cycling through six kinds so every kind lands in every
+// category with and without the KB Team assigned:
+//   0 new (pending approval)      3 active with a pending revision
+//   1 reviewed (awaiting approval) 4 inactive
+//   2 active                       5 active redirect
+// The ids and titles are deterministic ("Bulk NN - kind"), newest last.
+echo "==> Bulk articles\n";
+$bulk_count = 72;
+$bulk_kinds = ['pending approval', 'reviewed', 'active', 'pending revision', 'inactive', 'redirect'];
+$bulk_categories = [$getting_started_id, $advanced_topics_id, $reference_id];
+$bulk_base_time = time() - ($bulk_count * 3600);
+$bulk_first_id = 0;
+$bulk_last_id = 0;
+
+for ($i = 0; $i < $bulk_count; $i++)
+{
+	$block = intdiv($i, 6);
+	$kind = $i % 6;
+	$is_user_one = ($i % 2 === 0);
+	$bulk_title = sprintf('Bulk %02d - %s', $i + 1, $bulk_kinds[$kind]);
+	$bulk_time = $bulk_base_time + ($i * 3600);
+
+	$bulk_row = [
+		'article_category_id' => $bulk_categories[$block % 3],
+		'approved'            => ($kind >= 2) ? 1 : 0,
+		'status'              => [
+			\phpbbmodders\knowledgebase\inc\functions_kb::STATUS_NEW,
+			\phpbbmodders\knowledgebase\inc\functions_kb::STATUS_REVIEWED,
+			\phpbbmodders\knowledgebase\inc\functions_kb::STATUS_ACTIVE,
+			\phpbbmodders\knowledgebase\inc\functions_kb::STATUS_ACTIVE,
+			\phpbbmodders\knowledgebase\inc\functions_kb::STATUS_INACTIVE,
+			\phpbbmodders\knowledgebase\inc\functions_kb::STATUS_ACTIVE,
+		][$kind],
+		'article_title'       => $bulk_title,
+		'article_description' => 'Generated for paging tests.',
+		'article_body'        => ($kind === 5) ? '' : 'Generated article ' . ($i + 1) . ' of ' . $bulk_count . ', a ' . $bulk_kinds[$kind] . ' entry used to fill listings past one page.',
+		'author_id'           => $is_user_one ? $author1_id : $author2_id,
+		'author'              => $is_user_one ? 'kb_author1' : 'kb_author2',
+		'author_type'         => \phpbbmodders\knowledgebase\inc\functions_kb::AUTHOR_TYPE_USER,
+		'assigned_team_id'    => ($block % 2 === 0) ? $team_group_id : 0,
+		'article_date'        => $bulk_time,
+		'edit_date'           => $bulk_time,
+	];
+	if ($kind === 5)
+	{
+		$bulk_row['is_redirect'] = 1;
+		$bulk_row['redirect_url'] = 'https://example.org/bulk-' . ($i + 1);
+	}
+
+	$bulk_id = seed_create_article($articles_table, $bulk_row);
+	$bulk_first_id = $bulk_first_id ?: $bulk_id;
+	$bulk_last_id = $bulk_id;
+
+	if ($kind === 3)
+	{
+		$kb->save_article_revision($bulk_id, [
+			'article_title'       => $bulk_title,
+			'article_description' => 'Generated for paging tests (revised).',
+			'article_body'        => 'Pending revision of generated article ' . ($i + 1) . '.',
+			'bbcode_uid'          => '',
+			'bbcode_bitfield'     => '',
+		], $is_user_one ? $author1_id : $author2_id);
+	}
+}
+
+// The rows above are inserted directly, so bring the counters the extension
+// normally maintains in line with what is now published (active articles and
+// redirects per category; every submitted article for the board-wide total,
+// matching the ACP's own definition).
+foreach ($bulk_categories as $bulk_category_id)
+{
+	$sql = 'SELECT COUNT(article_id) AS published
+		FROM ' . $articles_table . '
+		WHERE article_category_id = ' . (int) $bulk_category_id . '
+			AND approved = 1
+			AND status = ' . \phpbbmodders\knowledgebase\inc\functions_kb::STATUS_ACTIVE;
+	$result = $db->sql_query($sql);
+	$published = (int) $db->sql_fetchfield('published');
+	$db->sql_freeresult($result);
+
+	$db->sql_query('UPDATE ' . $phpbb_container->getParameter('tables.categories_table') . ' SET number_articles = ' . $published . ' WHERE category_id = ' . (int) $bulk_category_id);
+}
+$sql = 'SELECT COUNT(article_id) AS submitted FROM ' . $articles_table . ' WHERE status <> ' . \phpbbmodders\knowledgebase\inc\functions_kb::STATUS_DRAFT;
+$result = $db->sql_query($sql);
+$config->set('kb_num_articles', (int) $db->sql_fetchfield('submitted'));
+$db->sql_freeresult($result);
+
 echo "    article_id={$article1_id} Welcome to the Knowledge Base (active, has a private draft-of-an-edit)\n";
 echo "    article_id={$article2_id} Installing the Board (active, co-authored)\n";
 echo "    article_id={$article3_id} Extending via Events (pending approval, group-authored)\n";
@@ -700,6 +793,7 @@ echo "    article_id={$article8_id} phpBB Official Site (active, redirect entry)
 echo "    article_id={$article9_id} Upgrading Between Versions (active, tagged phpBB Version: 3.3.x)\n";
 echo "    article_id={$article10_id} Article With a Real Comments Topic (active, real topic_id)\n";
 echo "    article_id={$article11_id} Unfinished Draft Article (DRAFT - private to kb_author1)\n";
+echo "    article_id={$bulk_first_id}..{$bulk_last_id} {$bulk_count} bulk articles (\"Bulk NN - kind\": pending approval, reviewed, active, pending revision, inactive, redirect, across all three categories, half assigned to KB Team)\n";
 
 echo "\nDone. Log in as kb_author1 / KbTest1234! and open the \"Manage Your Articles\" tab to see the\n";
 echo "seeded draft (and the Welcome article's separate draft-of-an-edit, visible when you edit it) in\n";
