@@ -456,6 +456,11 @@ def main():
         run(["sudo", "chgrp", "-R", "www-data", root / "cache"], dry=args.dry_run)
         run(["sudo", "chmod", "-R", "g+rwX", root / "cache"], dry=args.dry_run)
     print("Dry run complete; no changes made." if args.dry_run else "Done.")
+    if args.reset and not args.dry_run:
+        # Keep the board summary last so it isn't buried under seed/style output.
+        print(f"    Board root:   {root}")
+        print("    Admin login:  admin / KbTest1234!")
+        print(f"    Board URL:    http://{config['server_name']}:{config['server_port']}/")
 
 
 if __name__ == "__main__":
