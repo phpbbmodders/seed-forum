@@ -205,7 +205,3 @@ if [ "${SEED_FORUM_NGINX_ENABLED:-0}" = 1 ]; then
 else
 	echo "==> No nginx site configured; point your web server at $PHPBB_ROOT"
 fi
-
-echo "==> Done."
-echo "    Board root:   $PHPBB_ROOT"
-echo "    Admin login:  admin / KbTest1234!"
