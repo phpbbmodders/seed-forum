@@ -209,15 +209,16 @@ Standard users are `forum_alex`, `forum_blair`, `forum_casey`, `forum_drew`,
 and `forum_moderator`. The first four are members; the last has staff
 access and moderation permissions.
 
-Knowledgebase fixtures include public comments and private changelog
-forums; `kb_author1`, `kb_author2`, `kb_moderator`, and `kb_reader`; KB Team
-and KB Contributors groups; three categories; 11 hand-built articles
-covering approvals, revisions, co-authorship, redirects, tags, comments, and
-private drafts; and 72 generated "Bulk NN - kind" articles (pending approval,
-reviewed, active, pending revision, inactive and redirect, spread over all three
-categories, half assigned to KB Team) so listings and the Administration queue
-run to several pages of ten. `kb_reader` has view-only KB access. KB seeding preserves unrelated
-forum permissions.
+Knowledgebase fixtures include public comments and private changelog forums;
+four KB users; three review teams and a contributor group; 37 branching
+categories under four main roots, each with a six-level path; and 265 articles,
+including 216 bulk entries for pagination. Cases cover approval and revision
+states, user/group authors and co-authors, redirects, cross-listing, Markdown,
+BBCode, all custom-field widgets, required fields, private drafts, and
+attachments with thumbnail and maintenance cases. `kb_reader` has view-only
+KB access. KB seeding preserves unrelated forum permissions. PHP GD is needed
+for the image fixture. See [Knowledgebase fixtures](knowledgebase-fixtures.md)
+for the category paths, team permissions, browser coverage, and known defects.
 
 All fixture users use `KbTest1234!`. Installer admin credentials are
 `admin` / `KbTest1234!`, intended for disposable local boards.
