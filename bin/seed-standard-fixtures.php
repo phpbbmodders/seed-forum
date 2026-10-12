@@ -26,6 +26,29 @@ function standard_row(string $table, string $condition): array
 	return $row ?: [];
 }
 
+/**
+ * Rebuild phpBB's moderator cache after the fixture permissions are set.
+ *
+ * phpBB 3.3.x provides cache_moderators(); phpBB 4.0 removed it in favour of
+ * phpbb_cache_moderators(), which takes the database tools as an extra
+ * argument. Use whichever the installed board has.
+ *
+ * @return void
+ */
+function standard_cache_moderators(): void
+{
+	global $db, $cache, $auth, $phpbb_container;
+	if (function_exists('cache_moderators'))
+	{
+		cache_moderators();
+		return;
+	}
+	$arguments = (new ReflectionFunction('phpbb_cache_moderators'))->getNumberOfParameters() >= 4
+		? [$db, $phpbb_container->get('dbal.tools'), $cache, $auth]
+		: [$db, $cache, $auth];
+	phpbb_cache_moderators(...$arguments);
+}
+
 if (standard_row(FORUMS_TABLE, "forum_name = 'Community'"))
 {
 	throw new RuntimeException('Standard fixtures already exist; reset before seeding again');
@@ -152,7 +175,7 @@ foreach ($forums as $forum)
 	}
 }
 $permissions->acl_clear_prefetch();
-cache_moderators();
+standard_cache_moderators();
 
 /**
  * Submit an approved fixture post through phpBB's parsing and posting APIs.

@@ -6,6 +6,11 @@ Manage a disposable local phpBB 3.3.x board using SQLite. Configure local
 extensions and their seed scripts in YAML. Mount extensions, change their
 enabled state, seed fixtures, or purge cache independently of resetting.
 
+The reset (download, installer, nginx) targets phpBB 3.3.x. The two seed scripts,
+`bin/seed-standard-fixtures.php` and `bin/seed-kb-fixtures.php`, also run on a phpBB 4.0 board
+(checked on 4.0.0-a3-dev): run them with `bin/run-seed.php` against an installed 4.0 root that has
+the Knowledgebase enabled.
+
 ## Quick Start
 
 Only `--reset` wipes and reinstalls the board. Running without an operation
