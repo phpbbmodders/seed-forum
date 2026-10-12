@@ -7,6 +7,9 @@ variables:
   # Knowledgebase checkout; its Composer name determines the mount target.
   KB_EXT_SRC: /home/william/Desktop/repos/knowledgebase
 
+  # phpBB Modders Wiki checkout; its Composer name determines the mount target.
+  WIKI_EXT_SRC: /home/william/Desktop/repos/phpbb-ext-wiki
+
   # Optional extension with no seed script: uncomment this and its entry below.
   # HF_EXT_SRC: /home/william/Desktop/repos/holiday_flare
 
@@ -50,6 +53,14 @@ extensions:
     # Run after board seeds with the installed board root as the first argument.
     seeds:
       - bin/seed-kb-fixtures.php
+
+  wiki:
+    # Mount the wiki checkout under ext/ using its Composer vendor/name.
+    source: ${WIKI_EXT_SRC}
+
+    # Needs the board seeds above first (the REGISTERED group's baseline permissions).
+    seeds:
+      - bin/seed-wiki-fixtures.php
 
   # Extension without fixtures. Uncomment this block and HF_EXT_SRC above.
   # Keep seeds: [] at the same indentation as source; do not add a bare '-'.

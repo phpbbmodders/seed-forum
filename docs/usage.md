@@ -6,10 +6,11 @@ Manage a disposable local phpBB 3.3.x board using SQLite. Configure local
 extensions and their seed scripts in YAML. Mount extensions, change their
 enabled state, seed fixtures, or purge cache independently of resetting.
 
-The reset (download, installer, nginx) targets phpBB 3.3.x. The two seed scripts,
-`bin/seed-standard-fixtures.php` and `bin/seed-kb-fixtures.php`, also run on a phpBB 4.0 board
-(checked on 4.0.0-a3-dev): run them with `bin/run-seed.php` against an installed 4.0 root that has
-the Knowledgebase enabled.
+The reset downloads a phpBB 3.3.x release into an empty board folder; give it a phpBB 4.0 source tree
+that has its `install/` folder and vendor packages instead and it installs, mounts and seeds that
+(checked on 4.0.0-a3-dev; use a config without an nginx site unless you want one). The three seed scripts,
+`bin/seed-standard-fixtures.php`, `bin/seed-kb-fixtures.php` and `bin/seed-wiki-fixtures.php`, can also be
+run on their own with `bin/run-seed.php` against any installed board.
 
 ## Quick Start
 
@@ -225,6 +226,12 @@ KB access. KB seeding preserves unrelated forum permissions. PHP GD is needed
 for the image fixture. See [Knowledgebase fixtures](knowledgebase-fixtures.md)
 for the category paths, team permissions, browser coverage, and known defects.
 
+`bin/seed-wiki-fixtures.php` seeds the phpBB Modders Wiki: a discussion forum, four users
+(`wiki_reader`, `wiki_editor`, `wiki_uploader`, `wiki_moderator`), and 86 saved versions across articles
+in every state (version histories, pending and stale edits, a never-approved article, a redirect, sticky
+articles, forty bulk articles, uploaded files embedded with `[[File:name]]`, and a real discussion topic).
+See [Wiki fixtures](wiki-fixtures.md).
+
 All fixture users use `KbTest1234!`. Installer admin credentials are
 `admin` / `KbTest1234!`, intended for disposable local boards.
 These credentials are public. Keep the board local; do not expose it to the internet.
@@ -261,6 +268,7 @@ bin/reset-board.sh --validate
 - `bin/seed-bootstrap.php`: shared phpBB bootstrap for standard fixtures and state checks.
 - `bin/seed-standard-fixtures.php`: core forum fixtures, independent of KB.
 - `bin/seed-kb-fixtures.php`: Knowledgebase-specific fixtures.
+- `bin/seed-wiki-fixtures.php`: Wiki-specific fixtures.
 - `bin/extension-state.php`: reads enabled/disabled extension state.
 - `config/local.yml.example`: example runner configuration; edit its local paths.
 - `config/bare.yml`: original development-board profile; edit paths and style choices before use.
