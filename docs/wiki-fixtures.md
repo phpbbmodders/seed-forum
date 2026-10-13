@@ -40,7 +40,7 @@ so the board can be tried without signing in as anyone else.
 
 ## Articles
 
-Eighty-six versions are saved across these articles:
+Ninety-six versions are saved across these articles:
 
 | Article | What it shows |
 | --- | --- |
@@ -55,6 +55,18 @@ Eighty-six versions are saved across these articles:
 | Übersicht ✓ | A title with non-ASCII characters |
 | Busy Article | Thirty versions from three editors, so the history and contributions pages page |
 | Bulk Article 01 to 40 | Forty live articles, so the overview lists run to several entries |
+| Template:Out of date | A notice template with two versions and a `<noinclude>` documentation part with a live example |
+| Template:Extension infobox | An infobox (a table) whose rows appear only when a value is given, with `#if` |
+| Template:Row | A table row for use between `<table>` tags |
+| Template:Start Extension, Template:Start Person | Starting points offered by **Start from** when a new article is created |
+| Example Extension | An article that uses the notice and the infobox, with `#expr` inside a parameter |
+| Version Table | A table with a caption, `colspan` and `rowspan`, and a table whose rows come from `{{Row}}` |
+| Parser Functions | A table of parser function calls (in `[code]`) next to what they produce |
+| Headings and Contents | `==` headings, a contents box, and `[[Article#Section]]` and `[[#Section]]` links |
+
+The template and markup articles are created only when the extension has templates
+(it needs a build with `phpbbmodders\wiki\wiki\templates`); on an older build the
+script says so and skips them.
 
 Three files are stored in `store/phpbbmodders_wiki/` and recorded in the
 `wiki_file` table: `logo.png` (Main Page), and `diagram.png` and `notes.zip`
@@ -67,6 +79,9 @@ that has no topic, to members who may use it.
 - `/wiki/`: the overview, with the sticky, popular, latest and all-articles lists. The Pending list shows to
   `wiki_moderator`.
 - `/wiki/Busy%20Article?action=versions`: a version history of thirty rows.
+- `/wiki/templates`: the list of five templates. Open `/wiki/Template:Extension infobox` for a template page
+  (documentation, then the template text and how many articles use it).
+- `/wiki/Brand%20New?action=edit`: the **Start from** choice on a new article, which offers the two Start templates.
 - `/wiki/contributions/wiki_editor`, `wiki_uploader`, `wiki_moderator`: contributions pages. Sign in as
   `wiki_moderator` to see the pending versions among them.
 
