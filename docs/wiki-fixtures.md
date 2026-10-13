@@ -40,7 +40,7 @@ so the board can be tried without signing in as anyone else.
 
 ## Articles
 
-Ninety-six versions are saved across these articles:
+Ninety-seven versions are saved across these articles:
 
 | Article | What it shows |
 | --- | --- |
@@ -59,14 +59,17 @@ Ninety-six versions are saved across these articles:
 | Template:Extension infobox | An infobox (a table) whose rows appear only when a value is given, with `#if` |
 | Template:Row | A table row for use between `<table>` tags |
 | Template:Start Extension, Template:Start Person | Starting points offered by **Start from** when a new article is created |
-| Example Extension | An article that uses the notice and the infobox, with `#expr` inside a parameter |
-| Version Table | A table with a caption, `colspan` and `rowspan`, and a table whose rows come from `{{Row}}` |
-| Parser Functions | A table of parser function calls (in `[code]`) next to what they produce |
+| Example Extension | An article that uses the notice and the infobox, with `#expr` inside a parameter, in the Extensions category |
+| Version Table | A table with a caption, `colspan` and `rowspan`, and a table whose rows come from `{{Row}}`; in the Extensions and Reference categories |
+| Parser Functions | A table of parser function calls (in `[code]`) next to what they produce; in the Reference category |
 | Headings and Contents | `==` headings, a contents box, and `[[Article#Section]]` and `[[#Section]]` links |
+| Category:Extensions | A category page with a description, above the list of its members |
 
 The template and markup articles are created only when the extension has templates
 (it needs a build with `phpbbmodders\wiki\wiki\templates`); on an older build the
-script says so and skips them.
+script says so and skips them. The categories need a build with
+`phpbbmodders\wiki\wiki\categories`; without it the `[[Category:...]]` marks and the
+category page are left out.
 
 Three files are stored in `store/phpbbmodders_wiki/` and recorded in the
 `wiki_file` table: `logo.png` (Main Page), and `diagram.png` and `notes.zip`
@@ -81,6 +84,8 @@ that has no topic, to members who may use it.
 - `/wiki/Busy%20Article?action=versions`: a version history of thirty rows.
 - `/wiki/templates`: the list of five templates. Open `/wiki/Template:Extension infobox` for a template page
   (documentation, then the template text and how many articles use it).
+- `/wiki/categories`: Extensions (two articles, with a description page), Reference (two articles, no description page, to
+  show the list without one), Infobox templates and Notice templates (the two template pages, categorised outside `<includeonly>`).
 - `/wiki/Brand%20New?action=edit`: the **Start from** choice on a new article, which offers the two Start templates.
 - `/wiki/contributions/wiki_editor`, `wiki_uploader`, `wiki_moderator`: contributions pages. Sign in as
   `wiki_moderator` to see the pending versions among them.
