@@ -11,7 +11,9 @@
  * uploaded files (an image and a ZIP) embedded with [[File:name]], and one
  * article with a real discussion topic. When the extension has them: templates (a notice,
  * an infobox, a table row, two Start ... templates for new articles), articles that use
- * them, a table, parser functions, and headings with a contents box. Choose the discussion forum, so the
+ * them, a table, parser functions, and headings with a contents box; and, when it has
+ * categories, [[Category:...]] on those, one category page with a description and
+ * one without. Choose the discussion forum, so the
  * Start discussion button shows on the articles that have no topic. Print the
  * created IDs and login guidance.
  * Reject a board that already has the fixture forum or any wiki article. Use the
@@ -334,6 +336,11 @@ for ($i = 1; $i <= 40; $i++)
 if (class_exists('\\phpbbmodders\\wiki\\wiki\\templates'))
 {
 	echo "==> Templates and markup\n";
+	// [[Category:...]] needs a build with categories; before that it would stay plain text
+	$has_categories = class_exists('\\phpbbmodders\\wiki\\wiki\\categories');
+	$category = static function (string ...$names) use ($has_categories): string {
+		return $has_categories ? "\n\n" . implode(' ', array_map(static fn (string $name): string => "[[Category:{$name}]]", $names)) : '';
+	};
 	$call_demos = [
 		'{{#if: x | yes | no}}', '{{#switch: b | a = one | b = two | #default = other}}', '{{#expr: (2 + 3) * 4}}',
 		'{{#time: j F Y | 2026-10-12}}', '{{#ifexist: Version Table | there | missing}}', '{{#sub: hello world | 6}}',
@@ -349,10 +356,10 @@ if (class_exists('\\phpbbmodders\\wiki\\wiki\\templates'))
 	// An older, plainer version first, so the template has a history
 	wiki_add_history('Template:Out of date', [
 		['user' => $moderator_id, 'reason' => 'First version', 'text' => '[b]This article is out of date.[/b]'],
-		['user' => $moderator_id, 'reason' => 'Add the reason', 'text' => "<noinclude>Shows a notice that an article is out of date. Use it as {{Out of date|reason=...}}.\n\nExample:\n\n{{Out of date|reason=the 2.0 release changed this}}</noinclude><table><tr><td>[b]This article is out of date.[/b] {{#if: {{{reason|}}} | Reason: {{{reason}}}. }}</td></tr></table>"],
+		['user' => $moderator_id, 'reason' => 'Add the reason', 'text' => "<noinclude>Shows a notice that an article is out of date. Use it as {{Out of date|reason=...}}.\n\nExample:\n\n{{Out of date|reason=the 2.0 release changed this}}" . $category('Notice templates') . "</noinclude><table><tr><td>[b]This article is out of date.[/b] {{#if: {{{reason|}}} | Reason: {{{reason}}}. }}</td></tr></table>"],
 	], ['description' => 'A notice for articles that need updating', 'views' => 9]);
 	wiki_add_history('Template:Extension infobox', [
-		['user' => $moderator_id, 'reason' => 'First version', 'text' => "<noinclude>A box of facts about an extension. Example:\n\n{{Extension infobox|name=Wiki|version=1.1.0|requires=phpBB 3.3.19|author=phpBB Modders}}</noinclude><table>\n<caption>{{{name}}}</caption>\n<tr><th>Version</th><td>{{{version|unknown}}}</td></tr>\n{{#if: {{{requires|}}} | <tr><th>Requires</th><td>{{{requires}}}</td></tr> }}\n{{#if: {{{author|}}} | <tr><th>Author</th><td>{{{author}}}</td></tr> }}\n</table>"],
+		['user' => $moderator_id, 'reason' => 'First version', 'text' => "<noinclude>A box of facts about an extension. Example:\n\n{{Extension infobox|name=Wiki|version=1.1.0|requires=phpBB 3.3.19|author=phpBB Modders}}" . $category('Infobox templates') . "</noinclude><table>\n<caption>{{{name}}}</caption>\n<tr><th>Version</th><td>{{{version|unknown}}}</td></tr>\n{{#if: {{{requires|}}} | <tr><th>Requires</th><td>{{{requires}}}</td></tr> }}\n{{#if: {{{author|}}} | <tr><th>Author</th><td>{{{author}}}</td></tr> }}\n</table>"],
 	], ['description' => 'Facts about an extension in a box']);
 	wiki_add_history('Template:Row', [
 		['user' => $moderator_id, 'reason' => 'First version', 'text' => '<tr><th>{{{1}}}</th><td>{{{2|}}}</td></tr>'],
@@ -366,14 +373,21 @@ if (class_exists('\\phpbbmodders\\wiki\\wiki\\templates'))
 	], ['description' => 'An article about a person']);
 
 	wiki_add_history('Example Extension', [
-		['user' => $editor_id, 'reason' => 'First version', 'text' => "{{Out of date|reason=the 2.0 release changed the settings}}\n\n{{Extension infobox|name=Example Extension|version=1.1.0|requires=phpBB {{#expr: 3 + 0.3 round 1}}.19 and PHP 8.2|author=phpBB Modders}}\n\nThe example extension adds a wiki to a board. See [[Version Table]] for the releases and [[Parser Functions]] for what templates can do."],
+		['user' => $editor_id, 'reason' => 'First version', 'text' => "{{Out of date|reason=the 2.0 release changed the settings}}\n\n{{Extension infobox|name=Example Extension|version=1.1.0|requires=phpBB {{#expr: 3 + 0.3 round 1}}.19 and PHP 8.2|author=phpBB Modders}}\n\nThe example extension adds a wiki to a board. See [[Version Table]] for the releases and [[Parser Functions]] for what templates can do." . $category('Extensions')],
 	], ['description' => 'An article that uses two templates', 'views' => 21]);
 	wiki_add_history('Version Table', [
-		['user' => $editor_id, 'reason' => 'First version', 'text' => "Releases and what they changed:\n\n<table>\n<caption>Releases</caption>\n<tr><th>Version</th><th colspan=\"2\">Changes</th></tr>\n<tr><td>[b]1.0[/b]</td><td>First release</td><td>[[Example Extension]]</td></tr>\n<tr><td rowspan=\"2\">[b]1.1[/b]</td><td>Headings, tables and templates</td><td>[url=https://example.org]notes[/url]</td></tr>\n<tr><td>Parser functions</td><td>In use here</td></tr>\n</table>\n\nA table whose rows come from a template:\n\n<table>\n{{Row|Name|Wiki}}\n{{Row|Kind|Extension}}\n</table>"],
+		['user' => $editor_id, 'reason' => 'First version', 'text' => "Releases and what they changed:\n\n<table>\n<caption>Releases</caption>\n<tr><th>Version</th><th colspan=\"2\">Changes</th></tr>\n<tr><td>[b]1.0[/b]</td><td>First release</td><td>[[Example Extension]]</td></tr>\n<tr><td rowspan=\"2\">[b]1.1[/b]</td><td>Headings, tables and templates</td><td>[url=https://example.org]notes[/url]</td></tr>\n<tr><td>Parser functions</td><td>In use here</td></tr>\n</table>\n\nA table whose rows come from a template:\n\n<table>\n{{Row|Name|Wiki}}\n{{Row|Kind|Extension}}\n</table>" . $category('Extensions', 'Reference')],
 	], ['description' => 'A table, and a table built from templates', 'views' => 14]);
 	wiki_add_history('Parser Functions', [
-		['user' => $uploader_id, 'reason' => 'First version', 'text' => "What templates can work out:\n\n<table>\n<tr><th>Written</th><th>Shows</th></tr>\n{$call_rows}</table>"],
+		['user' => $uploader_id, 'reason' => 'First version', 'text' => "What templates can work out:\n\n<table>\n<tr><th>Written</th><th>Shows</th></tr>\n{$call_rows}</table>" . $category('Reference')],
 	], ['description' => 'Parser functions with their results', 'views' => 17]);
+	if ($has_categories)
+	{
+		// A category with a description page; Reference has none, to show the list without one
+		wiki_add_history('Category:Extensions', [
+			['user' => $moderator_id, 'reason' => 'First version', 'text' => 'Extensions for phpBB, and what they do.'],
+		], ['description' => 'The category of extensions']);
+	}
 	wiki_add_history('Headings and Contents', [
 		['user' => $moderator_id, 'reason' => 'First version', 'text' => "How a release is made, from branch to tag.\n\n== Preparing ==\nBranch from main and freeze the language files.\n=== Branch ===\nName it release-x.y.\n=== Language files ===\nRun the translation check.\n== Testing ==\nRun the unit tests, then the browser checks. See [[Getting Started#Editing]] and [[#Publishing]].\n== Publishing ==\nTag the release and attach the package.\n== See also ==\n[[Main Page]]"],
 	], ['description' => 'Headings, a contents box and links to sections', 'views' => 11]);
@@ -495,5 +509,6 @@ echo "  wiki_editor / " . WIKI_SEED_PASSWORD . "     edits and sees version hist
 echo "  wiki_uploader / " . WIKI_SEED_PASSWORD . "   editor who can also upload files and start discussions\n";
 echo "  wiki_moderator / " . WIKI_SEED_PASSWORD . "  approves and removes versions, sets redirects, sees inactive articles\n";
 echo "Pending list: Release Process and Style Guide (stale) and Draft Notes (never approved).\n";
+echo "Categories: /wiki/categories lists Extensions (with a description page), Reference (without one), Infobox templates and Notice templates, when the extension has categories.\n";
 echo "Templates: /wiki/templates lists five; open a new article (for example /wiki/Brand%20New?action=edit) to try Start from. Example Extension, Version Table, Parser Functions and Headings and Contents use them.\n";
 echo "Contributions: /wiki/contributions/wiki_editor, wiki_uploader, wiki_moderator (Busy Article has thirty versions).\n";
