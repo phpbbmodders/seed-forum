@@ -19,6 +19,8 @@ import sys
 REPO = Path(__file__).resolve().parent.parent
 VARIABLE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 PACKAGE = re.compile(r"[a-z0-9_.-]+/[a-z0-9_.-]+")
+# board.phpbb_branch values: 3.3 is the current release, master is phpBB 4.0.
+PHPBB_BRANCHES = ("3.3", "master")
 
 
 def fail(message):
@@ -126,17 +128,23 @@ def load_config(path):
             fail(f"{context} must contain PHP scripts")
         return result
 
-    board = mapping(document.get("board"), "board", {"root", "seeds", "server_name", "server_port", "nginx_site"})
+    board = mapping(document.get("board"), "board", {"root", "seeds", "server_name", "server_port", "nginx_site", "phpbb_branch"})
     root = path_value(board.get("root"), path.parent)
     if root == Path(root.anchor) or root == REPO or root in REPO.parents:
         fail("board.root must be a dedicated board directory")
     port = expand(str(board.get("server_port", "8092")))
     if not port.isdigit() or not 1 <= int(port) <= 65535:
         fail("board.server_port must be between 1 and 65535")
+    # Quote 3.3 in YAML; an unquoted 3.3 is read as a number and accepted too.
+    branch = board.get("phpbb_branch", "3.3")
+    branch = expand(str(branch) if isinstance(branch, (int, float)) and not isinstance(branch, bool) else branch)
+    if branch not in PHPBB_BRANCHES:
+        fail(f"board.phpbb_branch must be one of: {', '.join(PHPBB_BRANCHES)}")
     result = {
         "root": root,
         "server_name": expand(board.get("server_name", "localhost")),
         "server_port": port,
+        "phpbb_branch": branch,
         "nginx_site": path_value(board["nginx_site"], path.parent) if board.get("nginx_site") else None,
         "seeds": scripts(board.get("seeds", []), "board.seeds"),
         "extensions": {},
@@ -338,6 +346,7 @@ def main():
         return
     if args.status:
         print(f"Board: {root} ({'installed' if (root / 'config.php').is_file() else 'not installed'})")
+        print(f"phpBB branch: {config['phpbb_branch']}")
         # Configured values do not imply that nginx is listening on this port.
         print(f"Configured port: {config['server_port']}")
         print(f"Configured URL: http://{config['server_name']}:{config['server_port']}/")
@@ -395,7 +404,9 @@ def main():
                     fail(f"Enable {label} before running its seeds")
 
     required = ['php']
-    if args.reset:
+    if args.reset and config['phpbb_branch'] == 'master':
+        required += ['bash', 'jq', 'sqlite3', 'git', 'tar', 'sudo']
+    elif args.reset:
         required += ['bash', 'jq', 'sqlite3', 'curl', 'unzip', 'sha256sum', 'sudo']
     elif args.mount or args.remount or args.unmount or args.enable or args.disable or args.purge_cache or args.seed_only or args.install_styles:
         required += ['sudo']
@@ -405,9 +416,9 @@ def main():
 
     if args.reset:
         if args.dry_run:
-            print(f'Reset: remove config.php and store/sqlite.db under {root}, reinstall phpBB, mount and enable: {", ".join(sorted(names)) or "no extensions"}')
+            print(f'Reset: remove config.php and store/sqlite.db under {root}, reinstall phpBB {config["phpbb_branch"]}, mount and enable: {", ".join(sorted(names)) or "no extensions"}')
         env = os.environ.copy()
-        env.update(PHPBB_ROOT=str(root), SEED_FORUM_CONFIGURED="1", SERVER_NAME=config["server_name"], SERVER_PORT=config["server_port"], NGINX_SITE=str(config["nginx_site"] or root / ".no-nginx-site"), SEED_FORUM_NGINX_ENABLED='1' if config['nginx_site'] else '0')
+        env.update(PHPBB_ROOT=str(root), PHPBB_BRANCH=config["phpbb_branch"], SEED_FORUM_CONFIGURED="1", SERVER_NAME=config["server_name"], SERVER_PORT=config["server_port"], NGINX_SITE=str(config["nginx_site"] or root / ".no-nginx-site"), SEED_FORUM_NGINX_ENABLED='1' if config['nginx_site'] else '0')
         if config['nginx_site']:
             # Validate site shape and new-site socket selection before wiping data.
             subprocess.run(['python3', str(REPO / 'bin/nginx-site.py'), '--check'], env=env, check=True)

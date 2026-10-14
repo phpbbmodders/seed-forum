@@ -1,0 +1,44 @@
+# Disposable phpBB 4.0 (master) wiki test board: standard and wiki fixtures,
+# with the phpbb-ext-wiki checkout bind-mounted. Replace the paths for your
+# machine; environment variables with the same names override them.
+variables:
+  # Dedicated disposable board; --reset exports phpBB master here when empty.
+  PHPBB_ROOT: /home/william/Desktop/repos/seeded-board/wiki-master
+
+  # phpbbmodders/phpbb-ext-wiki checkout; its Composer name sets the mount target.
+  WIKI_EXT_SRC: /home/william/Desktop/repos/phpbb-ext-wiki
+
+  # Hostname recorded in generated board URLs during installation.
+  SERVER_NAME: localhost
+
+  # Port recorded by the installer and used by the nginx site below.
+  SERVER_PORT: '8095'
+
+  # Remove this variable and board.nginx_site to leave nginx unchanged.
+  NGINX_SITE: /etc/nginx/sites-available/phpbb-wiki-master-test.conf
+
+board:
+  root: ${PHPBB_ROOT}
+
+  # phpBB 4.0 from phpBB's master branch; omit or use '3.3' for the current release.
+  phpbb_branch: master
+
+  server_name: ${SERVER_NAME}
+
+  server_port: ${SERVER_PORT}
+
+  # New sites for master route through index.php instead of app.php.
+  nginx_site: ${NGINX_SITE}
+
+  # The wiki seed needs the standard fixtures first (REGISTERED group permissions).
+  seeds:
+    - bin/seed-standard-fixtures.php
+
+styles: {}
+
+extensions:
+  wiki:
+    source: ${WIKI_EXT_SRC}
+
+    seeds:
+      - bin/seed-wiki-fixtures.php

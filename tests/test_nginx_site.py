@@ -64,6 +64,14 @@ class NginxSiteTests(unittest.TestCase):
         self.assertNotIn('{{', text)
         self.assertFalse(site.exists())
 
+    def test_new_site_front_controller_follows_phpbb_branch(self):
+        for branch, controller in [(None, 'app.php'), ('3.3', 'app.php'), ('master', 'index.php')]:
+            env = dict(self.env) if branch is None else {**self.env, 'PHPBB_BRANCH': branch}
+            with patch.object(Path, 'is_socket', return_value=True):
+                _, _, text = nginx_site.prepare(env)
+            self.assertIn(f'rewrite ^(.*)$ /{controller}/$1 last;', text)
+            self.assertIn(f'try_files $uri $uri/ /install/{controller}$is_args$args =404;', text)
+
     def test_update_changes_root_host_port_and_keeps_other_rules(self):
         self.site.write_text(self.original)
         _, _, text = nginx_site.prepare(self.env)
