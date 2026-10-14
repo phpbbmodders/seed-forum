@@ -476,9 +476,11 @@ def main():
     if args.purge_cache or ((args.reset or args.install_styles) and config["styles"]):
         cli(root, ["cache:purge"], dry=args.dry_run)
     if args.enable or args.disable or args.seed_only or (args.reset and not args.skip_seed) or args.purge_cache or args.install_styles or (args.reset and config["styles"]):
-        # CLI-created cache files must remain writable by the web-server group.
-        run(["sudo", "chgrp", "-R", "www-data", root / "cache"], dry=args.dry_run)
-        run(["sudo", "chmod", "-R", "g+rwX", root / "cache"], dry=args.dry_run)
+        # Cache files and store/ folders that the CLI creates (seeds, migrations) must
+        # remain writable by the web-server group, as they would be on a real board.
+        for folder in ("cache", "store"):
+            run(["sudo", "chgrp", "-R", "www-data", root / folder], dry=args.dry_run)
+            run(["sudo", "chmod", "-R", "g+rwX", root / folder], dry=args.dry_run)
     print("Dry run complete; no changes made." if args.dry_run else "Done.")
     if args.reset and not args.dry_run:
         # Keep the board summary last so it isn't buried under seed/style output.

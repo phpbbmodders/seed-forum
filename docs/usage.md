@@ -244,8 +244,9 @@ These credentials are public. Keep the board local; do not expose it to the inte
 Requires Bash, Python 3.9+ with PyYAML (`python3-yaml`), and PHP compatible
 with the board. Reset also uses `jq`, `sqlite3`, `curl`, `unzip`, and
 `sha256sum`. Mount/unmount and web-group permission repairs use `sudo`.
-The permission setup assumes the local web group is `www-data`; cache
-permissions are repaired after enable, disable, seed, and purge commands.
+The permission setup assumes the local web group is `www-data`; `cache/`
+and `store/` permissions are repaired after enable, disable, seed, and purge
+commands, so folders the CLI creates there stay writable by the web server.
 
 If the board directory is missing or empty, reset downloads the current
 phpBB 3.3.x release and verifies its published SHA-256. Existing phpBB
