@@ -80,7 +80,10 @@ draft, pending, reviewed and inactive files, an aged orphan, and a deliberate
 missing-file orphan. A separate `kb_fixture_extra-file.txt` has no database row.
 Orphans are dated one day earlier so they appear in the ACP's aged-upload list.
 Only the fixture-created missing file is removed by the seed. Stable filenames
-avoid accumulating new files on every reset.
+avoid accumulating new files on every reset. The files go in the folder the
+extension keeps attachments in: `store/phpbbmodders_knowledgebase/files/` for
+current versions (the seed uses the extension's own folder helper), or the
+extension's `files/` folder for older ones.
 
 ## Runtime Coverage
 

@@ -647,13 +647,34 @@ function seed_format_article_text(string $text, bool $markdown = false, bool $in
 }
 
 /**
+ * The folder the Knowledgebase keeps attachments in. Newer versions keep them in store/phpbbmodders_knowledgebase/files/
+ * (made here, with the folder's own helper, when the extension has it); older ones kept them in the extension's folder.
+ *
+ * @return string The folder, with a trailing slash
+ */
+function seed_kb_upload_dir(): string
+{
+	global $phpbb_container, $phpbb_root_path;
+
+	$helper = '\\phpbbmodders\\knowledgebase\\inc\\upload_directory';
+	if (class_exists($helper))
+	{
+		$helper::ensure($phpbb_root_path);
+
+		return $helper::path($phpbb_root_path);
+	}
+
+	return $phpbb_container->get('ext.manager')->get_extension_path('phpbbmodders/knowledgebase', true) . 'files/';
+}
+
+/**
  * Creates a small KB attachment row and matching file.
  */
 function seed_create_attachment(int $article_id, int $poster_id, string $real_filename, string $contents, string $extension, string $mimetype, string $comment = '', bool $is_orphan = false, string $thumbnail = ''): int
 {
 	global $db, $phpbb_container;
 
-	$upload_dir = $phpbb_container->get('ext.manager')->get_extension_path('phpbbmodders/knowledgebase', true) . 'files/';
+	$upload_dir = seed_kb_upload_dir();
 	if (!is_dir($upload_dir) && !mkdir($upload_dir, 0775, true) && !is_dir($upload_dir))
 	{
 		fwrite(STDERR, "Failed to create Knowledgebase attachment directory: {$upload_dir}\n");
@@ -1175,7 +1196,7 @@ $missing_attachment_id = seed_create_attachment(0, $author1_id, 'missing-file-de
 $result = $db->sql_query('SELECT physical_filename FROM ' . $phpbb_container->getParameter('tables.kb_attachments_table') . ' WHERE attach_id = ' . $missing_attachment_id);
 $missing_filename = $db->sql_fetchfield('physical_filename');
 $db->sql_freeresult($result);
-$fixture_upload_dir = $phpbb_container->get('ext.manager')->get_extension_path('phpbbmodders/knowledgebase', true) . 'files/';
+$fixture_upload_dir = seed_kb_upload_dir();
 if (!unlink($fixture_upload_dir . $missing_filename))
 {
 	throw new RuntimeException('Failed to prepare the lost-file fixture.');
