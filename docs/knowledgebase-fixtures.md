@@ -62,7 +62,11 @@ fixtures have `approved=0`, matching the extension's deactivation operation.
 
 Named content covers individual authors, group authors, user and group
 co-authors, BBCode, Markdown headings and anchors, multilingual titles,
-cross-listing, comments, and a moderator-only changelog forum. Searchable
+cross-listing, comments, and a moderator-only changelog forum. A
+`Help and Questions` forum holds three member questions with a reply each
+(backing up before an upgrade, clean URLs on nginx, the installation guide),
+so a board search for `backup`, `troubleshooting` or `installation` shows forum
+posts with the Knowledge Base block beside them. Searchable
 branch guides share the keyword `branchwalk`. The seed builds the configured
 search backend through its public indexer.
 
@@ -76,7 +80,10 @@ draft, pending, reviewed and inactive files, an aged orphan, and a deliberate
 missing-file orphan. A separate `kb_fixture_extra-file.txt` has no database row.
 Orphans are dated one day earlier so they appear in the ACP's aged-upload list.
 Only the fixture-created missing file is removed by the seed. Stable filenames
-avoid accumulating new files on every reset.
+avoid accumulating new files on every reset. The files go in the folder the
+extension keeps attachments in: `store/phpbbmodders_knowledgebase/files/` for
+current versions (the seed uses the extension's own folder helper), or the
+extension's `files/` folder for older ones.
 
 ## Runtime Coverage
 
