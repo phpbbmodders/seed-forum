@@ -62,7 +62,11 @@ fixtures have `approved=0`, matching the extension's deactivation operation.
 
 Named content covers individual authors, group authors, user and group
 co-authors, BBCode, Markdown headings and anchors, multilingual titles,
-cross-listing, comments, and a moderator-only changelog forum. Searchable
+cross-listing, comments, and a moderator-only changelog forum. A
+`Help and Questions` forum holds three member questions with a reply each
+(backing up before an upgrade, clean URLs on nginx, the installation guide),
+so a board search for `backup`, `troubleshooting` or `installation` shows forum
+posts with the Knowledge Base block beside them. Searchable
 branch guides share the keyword `branchwalk`. The seed builds the configured
 search backend through its public indexer.
 

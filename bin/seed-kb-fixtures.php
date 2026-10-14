@@ -216,10 +216,57 @@ function seed_create_user(string $username, string $email): int
 	return $user_id;
 }
 
+/**
+ * Post a forum topic, or a reply to one, as a member through phpBB's own posting API.
+ * Runs after functions_posting.php is loaded; the admin user data is put back afterwards.
+ *
+ * @param int    $author  User id of the poster
+ * @param int    $forum   Forum id
+ * @param string $subject Topic title
+ * @param string $message Text with BBCode
+ * @param int    $topic   Topic id for a reply, zero for a new topic
+ * @return int Topic id
+ */
+function seed_forum_post(int $author, int $forum, string $subject, string $message, int $topic = 0): int
+{
+	global $db, $user, $auth;
+
+	$admin_data = $user->data;
+	$result = $db->sql_query('SELECT * FROM ' . USERS_TABLE . ' WHERE user_id = ' . $author);
+	$row = $db->sql_fetchrow($result);
+	$db->sql_freeresult($result);
+	$user->data = array_merge($admin_data, $row, ['user_ip' => '127.0.0.1', 'is_registered' => true, 'is_bot' => false]);
+	$auth->acl($user->data);
+
+	$uid = $bitfield = '';
+	$options = 0;
+	generate_text_for_storage($message, $uid, $bitfield, $options, true, true, true);
+	$data = [
+		'forum_id' => $forum, 'topic_id' => $topic, 'topic_title' => $subject,
+		'icon_id' => 0, 'poster_id' => $author, 'enable_bbcode' => true,
+		'enable_smilies' => true, 'enable_urls' => true, 'enable_sig' => false,
+		'message' => $message, 'message_md5' => md5($message),
+		'bbcode_uid' => $uid, 'bbcode_bitfield' => $bitfield,
+		'enable_indexing' => true, 'notify' => false, 'notify_set' => false,
+		'post_edit_locked' => false, 'topic_time_limit' => 0,
+		'topic_status' => ITEM_UNLOCKED, 'forum_name' => '', 'force_approved_state' => ITEM_APPROVED,
+	];
+	$poll = [];
+	submit_post($topic ? 'reply' : 'post', $subject, '', POST_NORMAL, $poll, $data);
+
+	$user->data = $admin_data;
+	$auth->acl($user->data);
+
+	return (int) $data['topic_id'];
+}
+
 echo "==> Forums\n";
 $announce_forum_id = seed_create_forum('Knowledge Base Comments', 'Public comment threads for KB articles.');
 $changelog_forum_id = seed_create_forum('Knowledge Base Changelog', 'Moderator-only per-article changelog threads.');
-echo "    comments forum_id={$announce_forum_id}, changelog forum_id={$changelog_forum_id}\n";
+// Members ask questions the articles answer, so a board search for those words finds forum
+// posts and Knowledge Base articles side by side.
+$help_forum_id = seed_create_forum('Help and Questions', 'Questions members ask that the Knowledge Base answers.');
+echo "    comments forum_id={$announce_forum_id}, changelog forum_id={$changelog_forum_id}, help forum_id={$help_forum_id}\n";
 
 echo "==> Users\n";
 $author1_id = seed_create_user('kb_author1', 'kb_author1@example.org');
@@ -374,6 +421,8 @@ $db->sql_freeresult($result);
 // the KB itself. Changelog forum: moderator-only, so just the KB team.
 $auth_admin->acl_set('group', $announce_forum_id, $standard_groups['REGISTERED'], ['f_' => ACL_YES], $forum_standard_role_id);
 $auth_admin->acl_set('group', $announce_forum_id, $standard_groups['ADMINISTRATORS'], ['f_' => ACL_YES], $forum_standard_role_id);
+$auth_admin->acl_set('group', $help_forum_id, $standard_groups['REGISTERED'], ['f_' => ACL_YES], $forum_standard_role_id);
+$auth_admin->acl_set('group', $help_forum_id, $standard_groups['ADMINISTRATORS'], ['f_' => ACL_YES], $forum_standard_role_id);
 $auth_admin->acl_set('group', $changelog_forum_id, $team_group_id, ['f_' => ACL_YES], $forum_standard_role_id);
 $auth_admin->acl_set('group', $changelog_forum_id, $standard_groups['ADMINISTRATORS'], ['f_' => ACL_YES], $forum_standard_role_id);
 
@@ -834,6 +883,20 @@ $article10_id = seed_create_article($articles_table, [
 ]);
 $kb->submit_article($getting_started_id, $announce_forum_id, 'Article With a Real Comments Topic', 'Has a real topic_id, for the View Topic action.', 'kb_author1', 'Getting Started', $article10_id);
 
+// Forum questions that the articles answer: a board search for backup, installation or
+// troubleshooting then shows these posts with the Knowledge Base block beside them.
+$help_topic_ids = [];
+$help_topics = [
+	[$reader_id, 'How do I back up my board before an upgrade?', 'I am about to upgrade and want a backup first. Is there a step-by-step guide to backing up the database and the files, and a way to restore them if something goes wrong?', $author1_id, 'Yes: the Knowledge Base has a Backup and Restore article that covers both the database and the files. Keep a backup before every upgrade.'],
+	[$author2_id, 'Troubleshooting clean URLs on nginx', 'My board links show app.php in the address and some pages give a 404. Is there a troubleshooting guide for clean URLs with nginx and PHP-FPM?', $author1_id, 'Start with the Clean URL Troubleshooting article in the Knowledge Base, then check the nginx location block.'],
+	[$reader_id, 'Where is the installation guide?', 'I just downloaded the board and want to run an installation on my own computer. Is there a guide for the installation, and what should I check first?', $moderator_id, 'The Knowledge Base has an Installation guide with a walkthrough for a local installation. Read the part before you begin first.'],
+];
+foreach ($help_topics as [$asker, $title, $question, $answerer, $answer])
+{
+	$help_topic_ids[] = $help_topic_id = seed_forum_post($asker, $help_forum_id, $title, $question);
+	seed_forum_post($answerer, $help_forum_id, 'Re: ' . $title, $answer, $help_topic_id);
+}
+
 // 11. Draft - never submitted, visible only to its author. Credited to
 // kb_author1 (the account these fixtures are meant to be explored as)
 // specifically so it's immediately visible on the Manage Your Articles
@@ -1193,6 +1256,7 @@ echo "    article_id={$article7_id} Securing Your Installation (active, pending 
 echo "    article_id={$article8_id} phpBB Official Site (active, redirect entry)\n";
 echo "    article_id={$article9_id} Upgrading Between Versions (active, tagged phpBB Version: 3.3.x)\n";
 echo "    article_id={$article10_id} Article With a Real Comments Topic (active, real topic_id)\n";
+echo '    ' . count($help_topic_ids) . " forum questions in Help and Questions (backup, clean URLs, installation) that match KB articles, for the board search block\n";
 echo "    article_id={$article11_id} Unfinished Draft Article (DRAFT - private to kb_author1)\n";
 echo "    article_id={$article12_id} Markdown Authoring Guide (active Markdown, cross-listed, required field, pending revision, draft-of-an-edit)\n";
 echo "    article_id={$article13_id} Attachment Handling Examples (active, attachment_id={$attachment1_id}, orphan_attachment_id={$orphan_attachment_id})\n";
