@@ -137,15 +137,15 @@ so rerun `--install-styles` after editing the source. The command purges cache.
 | `--mount` | Add selected mounts while retaining existing managed mounts. Already mounted targets are rejected. |
 | `--remount` | Replace the full managed mount set with the selected extensions. |
 | `--unmount` | Remove all managed mounts, or only those selected by `--only`. |
-| `--enable` | Enable selected extensions through phpBB CLI. |
-| `--disable` | Disable selected extensions through phpBB CLI without purging their data. |
+| `--enable` | Enable selected extensions through phpBB CLI, skipping any that are already enabled. |
+| `--disable` | Disable selected extensions through phpBB CLI without purging their data, skipping any that are not enabled. |
 | `--seed-only` | Run seeds on an existing board, with repeat protection. |
 | `--install-styles` | Copy/install configured styles and select the default without resetting data. |
 | `--skip-seed` | Skip all seeds during reset. |
 | `--purge-cache` | Purge phpBB cache independently or after other operations. |
 | `--only LABELS` | Select comma-separated extension config labels; excludes board seeds. |
 | `--dry-run` | Validate and print the selected operation without executing it. |
-| `--status` | Show the board root, configured port/URL, sources, mount state, and enabled/disabled extensions. |
+| `--status` | Show the board root, configured port/URL, sources, mount state, and enabled/disabled extensions. Warns about each configured extension that is not mounted, and about an unmounted copy left in its folder. |
 | `--validate` | Check config, sources, package names, and seed PHP syntax. No installed board needed. |
 | `--help` | Show command help. |
 
@@ -172,7 +172,10 @@ uses config labels, not Composer names. With remount it replaces the
 entire managed mount set with the selection. With unmount it removes
 only the selection. Mounting does not enable extensions; combine with
 `--enable` when needed. Disable extensions before unmounting if you plan
-to continue using the board without them.
+to continue using the board without them. Bind mounts do not survive a
+restart: run `--status` first, and `--remount` when it warns that an
+extension is not mounted. A dry run lists every enable and disable, since
+asking phpBB which extensions are enabled may warm the board's cache.
 
 Status reports the configured port and URL; it does not test whether a web
 server is listening there. Apply nginx setting changes with `--reset`.
