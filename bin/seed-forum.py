@@ -220,6 +220,12 @@ def save_mounts(root, targets):
         manifest.unlink(missing_ok=True)
 
 
+def extension_state(root):
+    """Return phpBB's enabled, disabled and available extension names for the board."""
+    output = subprocess.check_output(['php', str(REPO / 'bin/extension-state.php'), str(root)], cwd=root, text=True)
+    return json.loads(output)
+
+
 def cli(root, command, dry=False):
     """Run a noninteractive phpBB command from the configured board root."""
     run(["php", root / "bin/phpbbcli.php", *command, "--no-interaction"], cwd=root, dry=dry)
@@ -341,13 +347,20 @@ def main():
             name = extension["name"]
             mounted = bool(name and is_mounted(root / "ext" / name))
             print(f"{label}: {name or 'missing/invalid composer.json'}; source={extension['source']}; mounted={mounted}")
+            if name and not mounted:
+                # Bind mounts do not survive a restart; files left in the folder are an old copy.
+                target = root / "ext" / name
+                leftover = target.is_dir() and any(target.iterdir())
+                print(f"Warning: {label} is not mounted, so the board does not run {extension['source']}"
+                      + ("; the folder there holds an unmounted copy that may be out of date" if leftover else "")
+                      + ". Run --mount, or --remount after a restart.")
         for target in targets:
             print(f"Managed: {target}; mounted={is_mounted(target)}")
         if (root / "config.php").is_file():
             if args.dry_run:
                 run(['php', REPO / 'bin/extension-state.php', root], dry=True)
             else:
-                state = json.loads(subprocess.check_output(['php', str(REPO / 'bin/extension-state.php'), str(root)], cwd=root, text=True))
+                state = extension_state(root)
                 print('Enabled: ' + ', '.join(state['enabled']))
                 print('Disabled: ' + ', '.join(state['disabled']))
         return
@@ -405,8 +418,14 @@ def main():
             (root / ".seed-forum-seeds.json").unlink(missing_ok=True)
             names_file.write_text(json.dumps({label: ext['name'] for label, ext in extensions}, indent=2))
     if args.disable:
+        # Only enabled extensions are disabled; phpBB treats any other as an error.
+        # A dry run lists them all, since asking phpBB may warm the board's cache.
+        enabled = None if args.dry_run else set(extension_state(root)["enabled"])
         # Reverse config order when disabling extensions that may depend on peers.
         for _, extension in reversed(extensions):
+            if enabled is not None and extension["name"] not in enabled:
+                print(f"Not enabled, nothing to disable: {extension['name']}", flush=True)
+                continue
             cli(root, ["extension:disable", extension["name"]], dry=args.dry_run)
     if args.remount or args.unmount:
         selected = {root / "ext" / ext["name"] for _, ext in extensions if ext["name"]}
@@ -437,7 +456,12 @@ def main():
                 saved_names[label] = extension['name']
                 names_file.write_text(json.dumps(saved_names, indent=2))
     if args.enable and not args.reset:
+        # phpBB fails on an extension that is already enabled, so those are skipped.
+        enabled = None if args.dry_run else set(extension_state(root)["enabled"])
         for _, extension in extensions:
+            if enabled is not None and extension["name"] in enabled:
+                print(f"Already enabled: {extension['name']}", flush=True)
+                continue
             cli(root, ["extension:enable", extension["name"]], dry=args.dry_run)
     if args.seed_only or (args.reset and not args.skip_seed):
         for script in seeds:

@@ -47,12 +47,14 @@ class RunnerTests(unittest.TestCase):
         """Write the current test configuration as YAML in the temp directory."""
         self.config.write_text(yaml.safe_dump(self.document, sort_keys=False))
 
-    def invoke(self, *args, mounted=(), fail_unmount=False):
+    def invoke(self, *args, mounted=(), fail_unmount=False, enabled=()):
         """Run CLI validation with simulated commands and return ordered actions.
 
         mounted is the initial mount set. fail_unmount models a busy target;
         dry commands record their plan without changing the simulated state.
+        enabled lists the extensions phpBB reports as already enabled.
         """
+        state = json.dumps({'enabled': list(enabled), 'disabled': [], 'available': []})
         actions = []
         mounts = set(mounted)
 
@@ -68,7 +70,7 @@ class RunnerTests(unittest.TestCase):
             if str(argv[0]) == 'sudo' and argv[1] == 'mount':
                 mounts.add(Path(argv[-1]))
 
-        with patch.object(sys, 'argv', ['runner', '--config', str(self.config), *args]), patch.object(runner, 'run', side_effect=action), patch.object(runner, 'is_mounted', side_effect=lambda path: Path(path) in mounts), patch.object(runner.shutil, 'which', return_value='/usr/bin/tool'), contextlib.redirect_stdout(io.StringIO()):
+        with patch.object(sys, 'argv', ['runner', '--config', str(self.config), *args]), patch.object(runner, 'run', side_effect=action), patch.object(runner, 'is_mounted', side_effect=lambda path: Path(path) in mounts), patch.object(runner.shutil, 'which', return_value='/usr/bin/tool'), patch.object(runner.subprocess, 'check_output', return_value=state), contextlib.redirect_stdout(io.StringIO()):
             runner.main()
         self.assertEqual((self.root / 'config.php').read_text(), 'database must survive')
         return actions
@@ -168,6 +170,38 @@ class RunnerTests(unittest.TestCase):
         self.assertLess(mount, enable)
         self.assertLess(enable, purge)
         self.assertEqual(runner.managed(self.root), [self.root / 'ext/vendor/first'])
+
+    def test_enable_skips_extensions_that_are_already_enabled(self):
+        """phpBB fails on enabling an enabled extension, so only the others are enabled."""
+        actions = self.invoke('--mount', '--enable', enabled=['vendor/first'])
+        enabled = [action for action in actions if 'extension:enable' in action]
+        self.assertEqual(len(enabled), 1)
+        self.assertIn('vendor/second', enabled[0])
+
+    def test_disable_skips_extensions_that_are_not_enabled(self):
+        actions = self.invoke('--disable', enabled=['vendor/second'])
+        disabled = [action for action in actions if 'extension:disable' in action]
+        self.assertEqual(len(disabled), 1)
+        self.assertIn('vendor/second', disabled[0])
+
+    def test_dry_run_plans_every_enable_without_asking_phpbb(self):
+        """Asking phpBB may warm the cache, so a dry run lists every enable instead."""
+        actions = self.invoke('--mount', '--enable', '--dry-run', enabled=['vendor/first'])
+        self.assertEqual(sum('extension:enable' in action for action in actions), 2)
+
+    def test_status_warns_about_unmounted_extensions(self):
+        """A dropped bind mount, for example after a restart, is named with the fix."""
+        leftover = self.root / 'ext/vendor/first'
+        leftover.mkdir(parents=True)
+        (leftover / 'composer.json').write_text('{}')
+        output = io.StringIO()
+        mounted = {self.root / 'ext/vendor/second'}
+        with patch.object(sys, 'argv', ['runner', '--config', str(self.config), '--status']), patch.object(runner.subprocess, 'check_output', return_value='{"enabled": [], "disabled": []}'), patch.object(runner, 'is_mounted', side_effect=lambda path: Path(path) in mounted), patch.object(runner, 'run'), contextlib.redirect_stdout(output):
+            runner.main()
+        warnings = [line for line in output.getvalue().splitlines() if line.startswith('Warning:')]
+        self.assertEqual(len(warnings), 1)
+        self.assertIn('first is not mounted', warnings[0])
+        self.assertIn('unmounted copy that may be out of date', warnings[0])
 
     def test_remount_replaces_all_managed_mounts(self):
         targets = [self.root / 'ext/vendor/first', self.root / 'ext/vendor/second']
