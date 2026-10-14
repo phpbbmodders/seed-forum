@@ -2,13 +2,12 @@
 
 For requirements and initial setup, see the [README](../README.md).
 
-Manage a disposable local phpBB 3.3.x board using SQLite. Configure local
+Manage a disposable local phpBB board, 3.3.x or 4.0 (master), using SQLite. Configure local
 extensions and their seed scripts in YAML. Mount extensions, change their
 enabled state, seed fixtures, or purge cache independently of resetting.
 
-The reset downloads a phpBB 3.3.x release into an empty board folder; give it a phpBB 4.0 source tree
-that has its `install/` folder and vendor packages instead and it installs, mounts and seeds that
-(checked on 4.0.0-a3-dev; use a config without an nginx site unless you want one). The three seed scripts,
+The reset fills an empty board folder with the phpBB branch the config names in `board.phpbb_branch`
+(see [phpBB Branch](#phpbb-branch)). The three seed scripts,
 `bin/seed-standard-fixtures.php`, `bin/seed-kb-fixtures.php` and `bin/seed-wiki-fixtures.php`, can also be
 run on their own with `bin/run-seed.php` against any installed board.
 
@@ -103,6 +102,48 @@ extensions: {}
 This is an example, not an already installed site. Reset installs the board
 and configures nginx when `nginx_site` is present. Without that field, configure
 your web server separately.
+
+## phpBB Branch
+
+`board.phpbb_branch` picks the phpBB the board runs:
+
+- `'3.3'` (the default when the key is left out): the current 3.3.x release.
+  Quote it; an unquoted `3.3` is read as a number and also accepted.
+- `master`: phpBB 4.0 from the `master` branch of
+  [phpbb/phpbb](https://github.com/phpbb/phpbb).
+
+```yaml
+board:
+  root: /tmp/seed-forum-board-40
+  phpbb_branch: master
+  server_port: '8095'
+  seeds:
+    - bin/seed-standard-fixtures.php
+```
+
+The branch matters when reset fills an empty board folder and when it checks
+an existing one. For an empty folder, `3.3` downloads the release zip and
+checks its SHA-256. `master` fetches the newest `master` commit with git
+(a shallow fetch into `~/.cache/seed-forum/phpbb-master.git`, or under
+`$XDG_CACHE_HOME`), exports its `phpBB/` folder, and installs its Composer
+packages with the `composer.phar` from the same commit. This is the same
+`composer install --no-dev` step phpBB's own release build runs. The exported
+commit is written to `.seed-forum-phpbb-source` in the board folder. To pick
+up a newer `master`, empty the board folder and reset again.
+
+When the folder already holds phpBB, reset checks that its version belongs
+to the configured branch (3.3.x for `3.3`, 4.x for `master`) and that it
+has `vendor/` packages. Otherwise it stops before changing anything.
+
+On a new nginx site, `master` boards route through `index.php` and 3.3
+boards through `app.php`. In phpBB 4.0, `app.php` only redirects to
+`index.php`. An existing site keeps its routing; delete it to have reset
+write a new one.
+
+[`config/wiki-master.yml`](../config/wiki-master.yml) is a working
+example: a 4.0 board on port 8095 with the standard and wiki fixtures and
+the [phpbb-ext-wiki](https://github.com/phpbbmodders/phpbb-ext-wiki)
+checkout. Replace its paths before use.
 
 ## Styles
 
@@ -242,15 +283,16 @@ These credentials are public. Keep the board local; do not expose it to the inte
 ## Requirements And Checks
 
 Requires Bash, Python 3.9+ with PyYAML (`python3-yaml`), and PHP compatible
-with the board. Reset also uses `jq`, `sqlite3`, `curl`, `unzip`, and
-`sha256sum`. Mount/unmount and web-group permission repairs use `sudo`.
+with the board (phpBB 4.0 needs PHP 8.2 or newer). Reset also uses `jq` and
+`sqlite3`; a `3.3` reset uses `curl`, `unzip` and `sha256sum`, and a
+`master` reset uses `git` and `tar`. Mount/unmount and web-group permission repairs use `sudo`.
 The permission setup assumes the local web group is `www-data`; `cache/`
 and `store/` permissions are repaired after enable, disable, seed, and purge
 commands, so folders the CLI creates there stay writable by the web server.
 
-If the board directory is missing or empty, reset downloads the current
-phpBB 3.3.x release and verifies its published SHA-256. Existing phpBB
-source trees are reused. Nonempty directories that are not phpBB trees
+If the board directory is missing or empty, reset fetches the configured
+branch (see [phpBB Branch](#phpbb-branch)). Existing phpBB source trees of
+that branch are reused. Nonempty directories that are not phpBB trees
 are rejected. Mount, remount, enable, disable, seed, and cache commands
 require an installed board. Unmount requires an existing board directory.
 
@@ -276,6 +318,7 @@ bin/reset-board.sh --validate
 - `bin/extension-state.php`: reads enabled/disabled extension state.
 - `config/local.yml.example`: example runner configuration; edit its local paths.
 - `config/bare.yml`: original development-board profile; edit paths and style choices before use.
+- `config/wiki-master.yml`: phpBB 4.0 (master) wiki board example; edit its paths before use.
 - `config/install.yml.example`: phpBB installer settings template.
 - `config/nginx-site.conf.example`: template for new nginx board sites.
 - `config/phpbb-bare.conf`: concrete localhost:8093 bare-board site example.

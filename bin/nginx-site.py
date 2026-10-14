@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Create/enable a board's nginx site or update its root, host, and listen port.
 
-Read PHPBB_ROOT, SERVER_NAME, SERVER_PORT, and NGINX_SITE from the reset
-backend's environment. PHP_FPM_SOCKET optionally selects the socket for a new
+Read PHPBB_ROOT, PHPBB_BRANCH, SERVER_NAME, SERVER_PORT, and NGINX_SITE from
+the reset backend's environment; PHPBB_BRANCH picks a new site's front controller. PHP_FPM_SOCKET optionally selects the socket for a new
 site; otherwise discover the installed socket. --check validates the plan
 without writing. Apply changes through sudo, validate nginx, and reload it;
 restore the previous file/link if validation or reload fails.
@@ -75,8 +75,10 @@ def prepare(environ):
                 raise ValueError('Set PHP_FPM_SOCKET to select an installed PHP-FPM socket')
         if not Path(socket).is_socket() or not re.fullmatch(r'/[A-Za-z0-9_./-]+', socket):
             raise ValueError(f'PHP-FPM socket is missing or invalid: {socket}')
+        # phpBB 4.0 routes through index.php; its app.php only redirects there.
+        front_controller = 'index.php' if environ.get('PHPBB_BRANCH', '3.3') == 'master' else 'app.php'
         text = (REPO / 'config/nginx-site.conf.example').read_text()
-        for token, value in {'BOARD_ROOT': quoted_root, 'PORT': port, 'SERVER_NAME': host, 'PHP_FPM_SOCKET': socket, 'SITE_NAME': site.stem}.items():
+        for token, value in {'FRONT_CONTROLLER': front_controller, 'BOARD_ROOT': quoted_root, 'PORT': port, 'SERVER_NAME': host, 'PHP_FPM_SOCKET': socket, 'SITE_NAME': site.stem}.items():
             text = text.replace('{{' + token + '}}', value)
     return site, enabled, text
 

@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
 #
-# Rebuilds a disposable local phpBB 3.3.x board using SQLite, with optional
-# extensions enabled. Removes the board configuration, database, and cache.
-# Positional arguments are extension checkout directories validated by the
-# public runner. Prints install progress; any failing command stops the reset.
-# Fixture seeding runs separately in the public runner after this succeeds.
+# Rebuilds a disposable local phpBB board (3.3.x or 4.0 master) using SQLite,
+# with optional extensions enabled. Removes the board configuration, database,
+# and cache. Positional arguments are extension checkout directories validated
+# by the public runner. Prints install progress; any failing command stops the
+# reset. Fixture seeding runs separately in the public runner after this succeeds.
 #
 # Internal reset backend. Use reset-board.sh --reset --config FILE.
 # Configuration supplied by the public runner:
 #   PHPBB_ROOT   phpBB source tree to install into; if missing or empty,
-#                the current 3.3.x release is downloaded into it first
+#                PHPBB_BRANCH's source is fetched into it first
+#   PHPBB_BRANCH 3.3 downloads the current 3.3.x release zip (SHA-256 checked);
+#                master exports phpBB's master branch from GitHub with git and
+#                installs its Composer packages the way phpBB's release build does
 #   SERVER_NAME  hostname the installer records for generated URLs
 #   SERVER_PORT  port the installer records for generated URLs
 #   NGINX_SITE   nginx sites-available path; when enabled, create/update its
@@ -23,7 +26,7 @@ if [ "${SEED_FORUM_CONFIGURED:-0}" != 1 ]; then
 	exit 1
 fi
 
-: "${PHPBB_ROOT:?}" "${SERVER_NAME:?}" "${SERVER_PORT:?}" "${NGINX_SITE:?}"
+: "${PHPBB_ROOT:?}" "${PHPBB_BRANCH:?}" "${SERVER_NAME:?}" "${SERVER_PORT:?}" "${NGINX_SITE:?}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -46,10 +49,8 @@ unmount_extensions() {
 }
 
 # Fresh machine or wiped folder: fetch the current phpBB 3.3.x release
-# (as reported by phpBB's own version feed) and unpack it into
-# PHPBB_ROOT. Only runs when PHPBB_ROOT is missing or completely empty,
-# so an existing board's files are never touched.
-if [ ! -d "$PHPBB_ROOT" ] || [ -z "$(ls -A "$PHPBB_ROOT")" ]; then
+# (as reported by phpBB's own version feed) and unpack it into PHPBB_ROOT.
+download_release_33() {
 	echo "==> $PHPBB_ROOT is missing or empty; downloading the current phpBB 3.3.x release"
 	phpbb_version="$(curl -fsSL --max-time 30 https://version.phpbb.com/phpbb/versions.json | jq -r '.stable["3.3"].current')"
 	if ! [[ "$phpbb_version" =~ ^3\.3\.[0-9]+$ ]]; then
@@ -70,6 +71,46 @@ if [ ! -d "$PHPBB_ROOT" ] || [ -z "$(ls -A "$PHPBB_ROOT")" ]; then
 	rm -rf "$DOWNLOAD_DIR"
 	trap - EXIT
 	echo "==> Extracted phpBB $phpbb_version into $PHPBB_ROOT"
+}
+
+# Fresh machine or wiped folder: export phpBB's master branch (4.0) into
+# PHPBB_ROOT. Mirrors the "export" target of phpBB's build/build.xml: the
+# phpBB/ folder from git archive, then the same commit's composer.phar
+# installs the locked non-dev packages. Git checks every object against its
+# hash; the exported commit is recorded in .seed-forum-phpbb-source.
+PHPBB_GIT_URL="https://github.com/phpbb/phpbb.git"
+export_master() {
+	local cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/seed-forum/phpbb-master.git"
+	echo "==> $PHPBB_ROOT is missing or empty; exporting phpBB master from $PHPBB_GIT_URL"
+	if [ ! -d "$cache_dir" ]; then
+		mkdir -p "$(dirname "$cache_dir")"
+		git init -q --bare "$cache_dir"
+	fi
+	# A shallow fetch is enough for git archive and keeps the cache small.
+	git -C "$cache_dir" fetch -q --depth 1 "$PHPBB_GIT_URL" master
+	local commit
+	commit="$(git -C "$cache_dir" rev-parse FETCH_HEAD)"
+	BUILD_DIR="$(mktemp -d)"
+	trap 'rm -rf "$BUILD_DIR"' EXIT
+	git -C "$cache_dir" archive "$commit" phpBB composer.phar | tar -xf - -C "$BUILD_DIR"
+	echo "==> Installing Composer packages for phpBB master $commit"
+	(cd "$BUILD_DIR/phpBB" && php ../composer.phar install --no-dev --optimize-autoloader --ignore-platform-reqs --no-interaction --no-progress)
+	mkdir -p "$PHPBB_ROOT"
+	(shopt -s dotglob && mv "$BUILD_DIR/phpBB/"* "$PHPBB_ROOT/")
+	rm -rf "$BUILD_DIR"
+	trap - EXIT
+	printf '%s %s\n' "$PHPBB_GIT_URL" "$commit" > "$PHPBB_ROOT/.seed-forum-phpbb-source"
+	echo "==> Exported phpBB master $commit into $PHPBB_ROOT"
+}
+
+# Only runs when PHPBB_ROOT is missing or completely empty, so an existing
+# board's files are never touched.
+if [ ! -d "$PHPBB_ROOT" ] || [ -z "$(ls -A "$PHPBB_ROOT")" ]; then
+	case "$PHPBB_BRANCH" in
+		3.3) download_release_33 ;;
+		master) export_master ;;
+		*) echo "Unsupported PHPBB_BRANCH '$PHPBB_BRANCH' (expected 3.3 or master)." >&2; exit 1 ;;
+	esac
 fi
 
 if [ -d "$PHPBB_ROOT/install.disabled" ] && [ ! -d "$PHPBB_ROOT/install" ]; then
@@ -79,6 +120,23 @@ fi
 
 if [ ! -d "$PHPBB_ROOT/install" ]; then
 	echo "PHPBB_ROOT ($PHPBB_ROOT) doesn't look like a phpBB source tree (no install/ dir)." >&2
+	exit 1
+fi
+
+# An existing tree must match the configured branch: installing 3.3 files
+# with a master config (or the reverse) would give a board nobody asked for.
+tree_version="$(sed -n "s/^@define('PHPBB_VERSION', '\\([^']*\\)');/\\1/p" "$PHPBB_ROOT/includes/constants.php" 2>/dev/null || true)"
+case "$PHPBB_BRANCH" in
+	3.3) expected_version='^3\.3\.' ;;
+	master) expected_version='^4\.' ;;
+esac
+if ! [[ "$tree_version" =~ $expected_version ]]; then
+	echo "PHPBB_ROOT ($PHPBB_ROOT) holds phpBB '${tree_version:-unknown}', not the configured phpbb_branch $PHPBB_BRANCH." >&2
+	echo "Set board.phpbb_branch to match it, or empty the board folder to fetch $PHPBB_BRANCH." >&2
+	exit 1
+fi
+if [ ! -f "$PHPBB_ROOT/vendor/autoload.php" ]; then
+	echo "PHPBB_ROOT ($PHPBB_ROOT) has no vendor/ packages; run Composer there or empty the folder." >&2
 	exit 1
 fi
 

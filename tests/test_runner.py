@@ -292,6 +292,52 @@ class RunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'not a phpBB source tree'):
             self.invoke('--reset', '--skip-seed', '--dry-run')
 
+    def test_phpbb_branch_defaults_to_33_and_accepts_master(self):
+        self.assertEqual(runner.load_config(self.config)['phpbb_branch'], '3.3')
+        for value, expected in [('master', 'master'), ('3.3', '3.3'), (3.3, '3.3')]:
+            self.document['board']['phpbb_branch'] = value
+            self.save()
+            self.assertEqual(runner.load_config(self.config)['phpbb_branch'], expected)
+
+    def test_unknown_phpbb_branch_is_rejected(self):
+        for value in ['4.0', '3.2', 'main', True]:
+            self.document['board']['phpbb_branch'] = value
+            self.save()
+            with self.assertRaises(ValueError):
+                runner.load_config(self.config)
+
+    def test_reset_passes_phpbb_branch_to_backend_and_nginx(self):
+        (self.root / 'install.disabled').mkdir()
+        self.document['board']['phpbb_branch'] = 'master'
+        self.document['board']['nginx_site'] = str(self.base / 'sites-available/board.conf')
+        self.save()
+        with patch.object(runner.subprocess, 'run') as check:
+            self.invoke('--reset', '--skip-seed', '--dry-run')
+        self.assertEqual(check.call_args.kwargs['env']['PHPBB_BRANCH'], 'master')
+
+    def test_master_reset_requires_git_not_release_download_tools(self):
+        (self.root / 'install.disabled').mkdir()
+        self.document['board']['phpbb_branch'] = 'master'
+        self.save()
+        missing = {'git'}
+        with patch.object(runner.shutil, 'which', side_effect=lambda command: None if command in missing else '/usr/bin/' + command), \
+                patch.object(sys, 'argv', ['runner', '--config', str(self.config), '--reset', '--dry-run']), contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(ValueError, 'Required command not found: git'):
+                runner.main()
+            missing = {'curl', 'unzip', 'sha256sum'}
+            with patch.object(runner, 'run'):
+                runner.main()
+
+    def test_rebuild_refuses_tree_from_another_branch_before_changes(self):
+        (self.root / 'install').mkdir()
+        (self.root / 'includes').mkdir()
+        (self.root / 'includes/constants.php').write_text("<?php\n@define('PHPBB_VERSION', '3.3.19');\n")
+        env = {**runner.os.environ, 'SEED_FORUM_CONFIGURED': '1', 'PHPBB_ROOT': str(self.root), 'PHPBB_BRANCH': 'master', 'SERVER_NAME': 'localhost', 'SERVER_PORT': '8095', 'NGINX_SITE': str(self.root / '.no-nginx-site'), 'PATH': '/usr/bin:/bin'}
+        result = runner.subprocess.run(['bash', str(runner.REPO / 'bin/rebuild-board.sh')], env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("holds phpBB '3.3.19', not the configured phpbb_branch master", result.stderr)
+        self.assertTrue((self.root / 'install').is_dir())
+
     def test_reset_preflights_nginx_without_mutating_in_dry_run(self):
         (self.root / 'install.disabled').mkdir()
         self.document['board']['nginx_site'] = str(self.base / 'sites-available/board.conf')
@@ -302,6 +348,7 @@ class RunnerTests(unittest.TestCase):
         env = check.call_args.kwargs['env']
         self.assertEqual(env['SEED_FORUM_NGINX_ENABLED'], '1')
         self.assertEqual(env['SERVER_PORT'], '8092')
+        self.assertEqual(env['PHPBB_BRANCH'], '3.3')
         self.assertEqual(actions[0][0], 'bash')
 
     def test_invalid_nginx_plan_stops_reset_before_backend(self):
