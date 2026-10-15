@@ -239,6 +239,13 @@ def cli(root, command, dry=False):
     run(["php", root / "bin/phpbbcli.php", *command, "--no-interaction"], cwd=root, dry=dry)
 
 
+def web_group_writable(root: Path, folders: tuple, dry: bool) -> None:
+    """Give the web-server group write access to these board folders, recursively."""
+    for folder in folders:
+        run(["sudo", "chgrp", "-R", "www-data", root / folder], dry=dry)
+        run(["sudo", "chmod", "-R", "g+rwX", root / folder], dry=dry)
+
+
 def main():
     """Validate CLI/config inputs, then execute operations in dependency order.
 
@@ -485,13 +492,14 @@ def main():
                 shutil.copytree(style["source"], target, dirs_exist_ok=True, ignore=shutil.ignore_patterns('.git'))
             run(["php", REPO / "bin/install-style.php", root, label, "1" if style["default"] else "0"], dry=args.dry_run)
     if args.purge_cache or ((args.reset or args.install_styles) and config["styles"]):
+        # The web server writes compiled templates into folders only it may change; the
+        # CLI purge cannot delete those (and says nothing), so open them to the group first.
+        web_group_writable(root, ("cache",), args.dry_run)
         cli(root, ["cache:purge"], dry=args.dry_run)
     if args.enable or args.disable or args.seed_only or (args.reset and not args.skip_seed) or args.purge_cache or args.install_styles or (args.reset and config["styles"]):
         # Cache files and store/ folders that the CLI creates (seeds, migrations) must
         # remain writable by the web-server group, as they would be on a real board.
-        for folder in ("cache", "store"):
-            run(["sudo", "chgrp", "-R", "www-data", root / folder], dry=args.dry_run)
-            run(["sudo", "chmod", "-R", "g+rwX", root / folder], dry=args.dry_run)
+        web_group_writable(root, ("cache", "store"), args.dry_run)
     print("Dry run complete; no changes made." if args.dry_run else "Done.")
     if args.reset and not args.dry_run:
         # Keep the board summary last so it isn't buried under seed/style output.
