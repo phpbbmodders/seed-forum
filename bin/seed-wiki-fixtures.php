@@ -16,9 +16,9 @@
  * one without; when it has <details>, an Infobox and a Navbox template and a Page Layout
  * article using them with centred text; and, when it has the Starter templates page,
  * three template files in store/phpbbmodders_wiki/templates/ (one new, one the board
- * already has, one whose page was edited here). Choose the discussion forum, so the
- * Start discussion button shows on the articles that have no topic. Print the
- * created IDs and login guidance.
+ * already has, one whose page was edited here). When it has search, the articles are
+ * indexed for it. Choose the discussion forum, so the Start discussion button shows on
+ * the articles that have no topic. Print the created IDs and login guidance.
  * Reject a board that already has the fixture forum or any wiki article. Use the
  * runner for seed-ledger protection.
  *
@@ -589,6 +589,23 @@ submit_post('post', 'Getting Started', $admin['username'], POST_NORMAL, $poll, $
 $topic_id = (int) $data['topic_id'];
 $db->sql_query('UPDATE ' . $articles_table . " SET article_topic_id = {$topic_id} WHERE article_url = 'Getting Started'");
 echo "    topic_id={$topic_id} linked to \"Getting Started\"; the other articles show Start discussion to people who may link topics\n";
+
+// The articles above were saved straight into the database, past the wiki's search; index them
+// so a fresh board's wiki search and the board-search wiki block find them.
+if ($phpbb_container->has('phpbbmodders.wiki.search_sync'))
+{
+	echo "==> Search index\n";
+	$search_sync = $phpbb_container->get('phpbbmodders.wiki.search_sync');
+	$result = $db->sql_query('SELECT DISTINCT article_url FROM ' . $articles_table);
+	$indexed = 0;
+	while ($row = $db->sql_fetchrow($result))
+	{
+		$search_sync->sync($row['article_url']);
+		$indexed++;
+	}
+	$db->sql_freeresult($result);
+	echo "    {$indexed} articles indexed for the wiki search\n";
+}
 
 $cache->purge();
 
