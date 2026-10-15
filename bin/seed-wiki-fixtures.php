@@ -11,9 +11,12 @@
  * uploaded files (an image and a ZIP) embedded with [[File:name]], and one
  * article with a real discussion topic. When the extension has them: templates (a notice,
  * an infobox, a table row, two Start ... templates for new articles), articles that use
- * them, a table, parser functions, and headings with a contents box; and, when it has
+ * them, a table, parser functions, and headings with a contents box; when it has
  * categories, [[Category:...]] on those, one category page with a description and
- * one without. Choose the discussion forum, so the
+ * one without; when it has <details>, an Infobox and a Navbox template and a Page Layout
+ * article using them with centred text; and, when it has the Starter templates page,
+ * three template files in store/phpbbmodders_wiki/templates/ (one new, one the board
+ * already has, one whose page was edited here). Choose the discussion forum, so the
  * Start discussion button shows on the articles that have no topic. Print the
  * created IDs and login guidance.
  * Reject a board that already has the fixture forum or any wiki article. Use the
@@ -388,6 +391,40 @@ if (class_exists('\\phpbbmodders\\wiki\\wiki\\templates'))
 			['user' => $moderator_id, 'reason' => 'First version', 'text' => 'Extensions for phpBB, and what they do.'],
 		], ['description' => 'The category of extensions']);
 	}
+	// <center>, class="infobox" and <details> need a build that has them
+	if (class_exists('\\phpbbmodders\\wiki\\event\\wikilink_listener') && defined('phpbbmodders\\wiki\\event\\wikilink_listener::DETAILS_ELEMENTS'))
+	{
+		// The attribution header a starter template file has; Template:Infobox carries it as if it
+		// had been installed from the starter templates, so that file shows as already installed
+		$GLOBALS['wiki_seed_header'] = static function (string $name): string {
+			return "<noinclude>\nSource: https://en.wikipedia.org/wiki/Template:" . str_replace(' ', '_', $name) . "\nAdapted by phpBB Modders.\nChanges: rewritten for the wiki.\nLicence: CC BY-SA 4.0, https://creativecommons.org/licenses/by-sa/4.0/\n</noinclude>";
+		};
+		$infobox_rows = '';
+		$navbox_rows = '';
+		for ($i = 1; $i <= 5; $i++)
+		{
+			$infobox_rows .= "{{#if:{{{data{$i}|}}}|<tr><th>{{{label{$i}}}}</th><td>{{{data{$i}}}}</td></tr>}}";
+		}
+		for ($i = 1; $i <= 3; $i++)
+		{
+			$navbox_rows .= "{{#if:{{{list{$i}|}}}|<tr><th>{{{group{$i}}}}</th><td>{{{list{$i}}}}</td></tr>}}";
+		}
+		$GLOBALS['wiki_seed_infobox'] = $GLOBALS['wiki_seed_header']('Infobox') . "<noinclude>A box of facts at the right of an article." . $category('Infobox templates') . "</noinclude><table class=\"infobox\"><caption>{{{title|}}}</caption>{{#if:{{{above|}}}|<tr><th colspan=\"2\">{{{above}}}</th></tr>}}{$infobox_rows}</table>";
+		wiki_add_history('Template:Infobox', [
+			['user' => $moderator_id, 'reason' => 'First version', 'text' => $GLOBALS['wiki_seed_infobox']],
+		], ['description' => 'A box of facts at the right of an article']);
+		wiki_add_history('Template:Navbox', [
+			['user' => $moderator_id, 'reason' => 'First version', 'text' => "<noinclude>Links to related articles in a box the reader can close. Use state=expanded to start it open.</noinclude>{{#ifeq:{{{state|}}}|expanded|<details class=\"navbox\" open>|<details class=\"navbox\">}}<summary>{{{title|}}}</summary><table>{$navbox_rows}</table></details>"],
+		], ['description' => 'Links to related articles']);
+		wiki_add_history('Page Layout', [
+			['user' => $editor_id, 'reason' => 'First version', 'text' => "{{Infobox|title=Wiki|above=phpBB extension|label1=Version|data1=1.1.0|label2=Requires|data2=phpBB 3.3.19|label3=Licence|data3=GPL-2.0|label4=Developer|data4=phpBB Modders}}The box on the right is an infobox: a table with the infobox class, here drawn by [[Template:Infobox]]. The text flows round it.\n\n<center>[i]This line is centred.[/i]</center>\n\n<details><summary>A box the reader opens</summary>This text is hidden until the title is clicked.</details>\n\n{{Navbox|title=Wiki help|state=expanded|group1=Start|list1=[[Main Page]] · [[Getting Started]]|group2=Markup|list2=[[Version Table]] · [[Parser Functions]] · [[Headings and Contents]]|group3=Templates|list3=[[Example Extension]]}}" . $category('Reference')],
+		], ['description' => 'An infobox, centred text, a box the reader opens and a navbox', 'views' => 8]);
+	}
+	else
+	{
+		echo "    this build of the extension has no <details>; the page layout articles were skipped\n";
+	}
+
 	wiki_add_history('Headings and Contents', [
 		['user' => $moderator_id, 'reason' => 'First version', 'text' => "How a release is made, from branch to tag.\n\n== Preparing ==\nBranch from main and freeze the language files.\n=== Branch ===\nName it release-x.y.\n=== Language files ===\nRun the translation check.\n== Testing ==\nRun the unit tests, then the browser checks. See [[Getting Started#Editing]] and [[#Publishing]].\n== Publishing ==\nTag the release and attach the package.\n== See also ==\n[[Main Page]]"],
 	], ['description' => 'Headings, a contents box and links to sections', 'views' => 11]);
@@ -395,6 +432,33 @@ if (class_exists('\\phpbbmodders\\wiki\\wiki\\templates'))
 else
 {
 	echo "    this build of the extension has no templates; the template articles were skipped\n";
+}
+
+// Template files for ACP > Extensions > Wiki > Starter templates, as an admin would copy them by FTP:
+// a new one, one the board already has, and one whose page was edited on the board, so the list shows
+// each kind of row. Nothing is installed.
+if (class_exists('\\phpbbmodders\\wiki\\wiki\\starter_templates') && isset($GLOBALS['wiki_seed_infobox']))
+{
+	echo "==> Starter template files\n";
+	$starter_dir = $phpbb_root_path . \phpbbmodders\wiki\wiki\starter_templates::DIRECTORY;
+	if (!is_dir($starter_dir) && !mkdir($starter_dir, 0775, true))
+	{
+		fwrite(STDERR, "Could not create {$starter_dir}.\n");
+		exit(1);
+	}
+	$header = $GLOBALS['wiki_seed_header'];
+	$starter_files = [
+		'Main'			=> $header('Main') . '[i]Main article: [[{{{1}}}]][/i]',
+		// The same text as the board's Template:Infobox, so it shows as already installed
+		'Infobox'		=> $GLOBALS['wiki_seed_infobox'],
+		// Template:Out of date exists with other text, so installing would replace the board's page
+		'Out of date'	=> $header('Out of date') . '<table><tr><td>[b]This article may be out of date.[/b]</td></tr></table>',
+	];
+	foreach ($starter_files as $name => $text)
+	{
+		file_put_contents($starter_dir . $name . '.wiki', $text);
+	}
+	echo '    ' . count($starter_files) . " files in {$starter_dir}\n";
 }
 
 $result = $db->sql_query('SELECT COUNT(*) AS total FROM ' . $articles_table);
@@ -510,5 +574,6 @@ echo "  wiki_uploader / " . WIKI_SEED_PASSWORD . "   editor who can also upload 
 echo "  wiki_moderator / " . WIKI_SEED_PASSWORD . "  approves and removes versions, sets redirects, sees inactive articles\n";
 echo "Pending list: Release Process and Style Guide (stale) and Draft Notes (never approved).\n";
 echo "Categories: /wiki/categories lists Extensions (with a description page), Reference (without one), Infobox templates and Notice templates, when the extension has categories.\n";
-echo "Templates: /wiki/templates lists five; open a new article (for example /wiki/Brand%20New?action=edit) to try Start from. Example Extension, Version Table, Parser Functions and Headings and Contents use them.\n";
+echo "Templates: /wiki/templates lists five (seven with Infobox and Navbox); open a new article (for example /wiki/Brand%20New?action=edit) to try Start from. Example Extension, Version Table, Parser Functions, Headings and Contents and Page Layout use them.\n";
+echo "Starter templates: ACP > Extensions > Wiki > Starter templates lists Main (new), Infobox (already installed) and Out of date (edited here), when the extension has that page.\n";
 echo "Contributions: /wiki/contributions/wiki_editor, wiki_uploader, wiki_moderator (Busy Article has thirty versions).\n";
