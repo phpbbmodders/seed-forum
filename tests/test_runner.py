@@ -171,6 +171,13 @@ class RunnerTests(unittest.TestCase):
         self.assertLess(enable, purge)
         self.assertEqual(runner.managed(self.root), [self.root / 'ext/vendor/first'])
 
+    def test_purge_opens_the_cache_to_the_web_group_first(self):
+        """Compiled templates the web server wrote can only be purged once the group may change them."""
+        actions = self.invoke('--purge-cache')
+        purge = next(i for i, action in enumerate(actions) if 'cache:purge' in action)
+        before = [action for action in actions[:purge] if action[:2] == ['sudo', 'chmod']]
+        self.assertTrue(any(str(self.root / 'cache') in map(str, action) for action in before))
+
     def test_enable_skips_extensions_that_are_already_enabled(self):
         """phpBB fails on enabling an enabled extension, so only the others are enabled."""
         actions = self.invoke('--mount', '--enable', enabled=['vendor/first'])
