@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 #
 # Rebuilds a disposable local phpBB board (3.3.x or 4.0 master) using SQLite,
-# with optional extensions enabled. Removes the board configuration, database,
-# and cache. Positional arguments are extension checkout directories validated
+# with optional extensions enabled. Removes the board configuration, cache, and
+# store/ contents (database and extension data; phpBB's .htaccess and index.htm
+# stay). Positional arguments are extension checkout directories validated
 # by the public runner. Prints install progress; any failing command stops the
 # reset. Fixture seeding runs separately in the public runner after this succeeds.
 #
@@ -176,8 +177,9 @@ done
 echo "==> Wiping previous install state under $PHPBB_ROOT"
 # Web requests can leave cache files owned by www-data.
 sudo rm -f "$PHPBB_ROOT/config.php"
-sudo rm -f "$PHPBB_ROOT/store/sqlite.db"
-sudo rm -f "$PHPBB_ROOT/store/install_config.php"
+# Everything under store/ except phpBB's own .htaccess and index.htm: the
+# database, install_config.php and extension data from earlier boards.
+sudo bash "$SCRIPT_DIR/clean-store.sh" "$PHPBB_ROOT"
 sudo find "$PHPBB_ROOT/cache" -mindepth 1 ! -name '.htaccess' ! -name 'index.htm' -exec rm -rf {} +
 sudo chown -R "$(id -u):$(id -g)" "$PHPBB_ROOT/cache" "$PHPBB_ROOT/store"
 

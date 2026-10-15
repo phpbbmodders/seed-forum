@@ -296,6 +296,14 @@ that branch are reused. Nonempty directories that are not phpBB trees
 are rejected. Mount, remount, enable, disable, seed, and cache commands
 require an installed board. Unmount requires an existing board directory.
 
+Reset removes `config.php`, the cache, and everything under `store/` except
+the `.htaccess` and `index.htm` that phpBB ships there. That includes the
+SQLite database and every extension's own folder (uploads, attachments,
+wiki starter templates), so files from an earlier board never carry over;
+extensions and seeds create their folders again. Reset refuses to clean
+`store/` when it is a symlink, resolves outside the board, or has a mount
+point inside it. Symlinks inside `store/` are removed, not followed.
+
 ```bash
 python3 -m unittest discover -s tests -v
 bash -n bin/reset-board.sh
