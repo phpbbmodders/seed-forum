@@ -434,6 +434,32 @@ else
 	echo "    this build of the extension has no templates; the template articles were skipped\n";
 }
 
+/**
+ * Make one of the extension's folders under store/ and keep the files in it private, as the
+ * extension does: an .htaccess denying web access and an empty index.htm. The two files are
+ * written whenever they are missing, not only when the folder is new, since the starter
+ * templates folder is made first and its mkdir also makes the parent folder.
+ *
+ * @param string $dir Full path, with a trailing slash.
+ * @return bool Whether the folder exists afterwards.
+ */
+function wiki_private_folder(string $dir): bool
+{
+	if (!is_dir($dir) && !mkdir($dir, 0775, true))
+	{
+		return false;
+	}
+	if (!file_exists($dir . '.htaccess'))
+	{
+		file_put_contents($dir . '.htaccess', "# Files are only read through the wiki.\n<IfModule mod_authz_core.c>\n\tRequire all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\n\tOrder allow,deny\n\tDeny from all\n</IfModule>\n");
+	}
+	if (!file_exists($dir . 'index.htm'))
+	{
+		file_put_contents($dir . 'index.htm', '');
+	}
+	return true;
+}
+
 // Template files for ACP > Extensions > Wiki > Starter templates, as an admin would copy them by FTP:
 // a new one, one the board already has, and one whose page was edited on the board, so the list shows
 // each kind of row. Nothing is installed.
@@ -441,7 +467,7 @@ if (class_exists('\\phpbbmodders\\wiki\\wiki\\starter_templates') && isset($GLOB
 {
 	echo "==> Starter template files\n";
 	$starter_dir = $phpbb_root_path . \phpbbmodders\wiki\wiki\starter_templates::DIRECTORY;
-	if (!is_dir($starter_dir) && !mkdir($starter_dir, 0775, true))
+	if (!wiki_private_folder($phpbb_root_path . 'store/phpbbmodders_wiki/') || !wiki_private_folder($starter_dir))
 	{
 		fwrite(STDERR, "Could not create {$starter_dir}.\n");
 		exit(1);
@@ -517,11 +543,10 @@ if ($probe !== false)
 {
 	$db->sql_freeresult($probe);
 	$store = $phpbb_root_path . 'store/phpbbmodders_wiki/';
-	if (!is_dir($store))
+	if (!wiki_private_folder($store))
 	{
-		mkdir($store, 0755, true);
-		file_put_contents($store . '.htaccess', "# Files are only read through the wiki.\n<IfModule mod_authz_core.c>\n\tRequire all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\n\tOrder allow,deny\n\tDeny from all\n</IfModule>\n");
-		file_put_contents($store . 'index.htm', '');
+		fwrite(STDERR, "Could not create {$store}.\n");
+		exit(1);
 	}
 	$files = [
 		['Main Page', 'logo.png', wiki_png(160, 80, 40), 'image/png', 1, $moderator_id],
