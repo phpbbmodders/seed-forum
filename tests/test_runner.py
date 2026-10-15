@@ -338,6 +338,46 @@ class RunnerTests(unittest.TestCase):
         self.assertIn("holds phpBB '3.3.19', not the configured phpbb_branch master", result.stderr)
         self.assertTrue((self.root / 'install').is_dir())
 
+    def clean_store(self):
+        """Run the reset's store/ cleaner on the test board and return the result."""
+        return runner.subprocess.run(['bash', str(runner.REPO / 'bin/clean-store.sh'), str(self.root)], capture_output=True, text=True)
+
+    def test_clean_store_keeps_only_phpbb_files_and_never_follows_symlinks(self):
+        store = self.root / 'store'
+        (store / 'phpbbmodders_wiki/templates').mkdir(parents=True)
+        for name in ['.htaccess', 'index.htm', 'sqlite.db', 'install_config.php', 'phpbbmodders_wiki/index.htm', 'phpbbmodders_wiki/templates/Stale.wiki']:
+            (store / name).write_text(name)
+        outside = self.base / 'outside'
+        outside.mkdir()
+        (outside / 'keep.txt').write_text('outside the board')
+        (store / 'linked_dir').symlink_to(outside, target_is_directory=True)
+        (store / 'linked_file').symlink_to(outside / 'keep.txt')
+        result = self.clean_store()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(sorted(path.name for path in store.iterdir()), ['.htaccess', 'index.htm'])
+        self.assertEqual((store / '.htaccess').read_text(), '.htaccess')
+        self.assertEqual((outside / 'keep.txt').read_text(), 'outside the board')
+
+    def test_clean_store_refuses_symlinked_store(self):
+        outside = self.base / 'outside'
+        outside.mkdir()
+        (outside / 'keep.txt').write_text('outside the board')
+        (self.root / 'store').symlink_to(outside, target_is_directory=True)
+        result = self.clean_store()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('it is a symlink', result.stderr)
+        self.assertTrue((outside / 'keep.txt').is_file())
+
+    def test_clean_store_resolves_a_symlinked_board_root(self):
+        (self.root / 'store').mkdir()
+        (self.root / 'store/sqlite.db').write_text('old database')
+        (self.root / 'store/index.htm').write_text('phpBB')
+        link = self.base / 'board link'
+        link.symlink_to(self.root, target_is_directory=True)
+        result = runner.subprocess.run(['bash', str(runner.REPO / 'bin/clean-store.sh'), str(link)], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([path.name for path in (self.root / 'store').iterdir()], ['index.htm'])
+
     def test_reset_preflights_nginx_without_mutating_in_dry_run(self):
         (self.root / 'install.disabled').mkdir()
         self.document['board']['nginx_site'] = str(self.base / 'sites-available/board.conf')

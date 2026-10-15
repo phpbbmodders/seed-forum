@@ -416,7 +416,7 @@ def main():
 
     if args.reset:
         if args.dry_run:
-            print(f'Reset: remove config.php and store/sqlite.db under {root}, reinstall phpBB {config["phpbb_branch"]}, mount and enable: {", ".join(sorted(names)) or "no extensions"}')
+            print(f'Reset: remove config.php and store/ contents (database, extension data) under {root}, reinstall phpBB {config["phpbb_branch"]}, mount and enable: {", ".join(sorted(names)) or "no extensions"}')
         env = os.environ.copy()
         env.update(PHPBB_ROOT=str(root), PHPBB_BRANCH=config["phpbb_branch"], SEED_FORUM_CONFIGURED="1", SERVER_NAME=config["server_name"], SERVER_PORT=config["server_port"], NGINX_SITE=str(config["nginx_site"] or root / ".no-nginx-site"), SEED_FORUM_NGINX_ENABLED='1' if config['nginx_site'] else '0')
         if config['nginx_site']:
