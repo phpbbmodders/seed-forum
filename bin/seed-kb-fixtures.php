@@ -3,9 +3,9 @@
  * Seed an installed board with the Knowledgebase extension enabled.
  *
  * Input: phpBB board root as the first argument. Create public comments and
- * private changelog forums, four users, three teams, a contributor group,
+ * private changelog forums, five users, three teams, a contributor group,
  * branching KB categories, and named articles covering approvals,
- * revisions, co-authorship,
+ * revisions, co-authorship, scoped author transfers,
  * redirects, tags, comments, Markdown, cross-listing, attachments, required
  * fields, and private drafts, plus a block of bulk articles so every listing
  * and every Administration queue choice runs to several pages. Print created
@@ -273,7 +273,8 @@ $author1_id = seed_create_user('kb_author1', 'kb_author1@example.org');
 $author2_id = seed_create_user('kb_author2', 'kb_author2@example.org');
 $moderator_id = seed_create_user('kb_moderator', 'kb_moderator@example.org');
 $reader_id = seed_create_user('kb_reader', 'kb_reader@example.org');
-echo "    kb_author1={$author1_id} kb_author2={$author2_id} kb_moderator={$moderator_id} kb_reader={$reader_id} (password for all: KbTest1234!)\n";
+$transfer_moderator_id = seed_create_user('kb_transfer_moderator', 'kb_transfer_moderator@example.org');
+echo "    kb_author1={$author1_id} kb_author2={$author2_id} kb_moderator={$moderator_id} kb_reader={$reader_id} kb_transfer_moderator={$transfer_moderator_id} (password for all: KbTest1234!)\n";
 
 echo "==> Team group\n";
 $sql = "SELECT group_id FROM " . GROUPS_TABLE . " WHERE group_name = 'KB Team'";
@@ -342,7 +343,7 @@ $auth_admin->acl_set('user', 0, $moderator_id, ['a_manage_kb' => ACL_YES]);
 // extension's own migration) gates the whole KB - version_1_0_7.php
 // adds the option but grants it to nobody by default, so without this,
 // only a_manage_kb holders (i.e. only kb_moderator) could see the KB
-// at all. REGISTERED covers all four seeded users alike, including
+// at all. REGISTERED covers all seeded users alike, including
 // kb_reader, who should be able to see the KB without being able to
 // submit anything into it.
 //
@@ -594,6 +595,24 @@ foreach ($category_ids as $category_key => $category_id)
 	}
 }
 
+// Optional on older Knowledge Base checkouts: this account can transfer authors
+// only in Getting Started, without KB administration or article-edit privileges.
+if (isset($kb_auth_option_ids['kb_m_change_author']))
+{
+	$kb_users_table = $phpbb_container->getParameter('tables.kb_users_table');
+	$db->sql_query('INSERT INTO ' . $kb_users_table . ' ' . $db->sql_build_array('INSERT', [
+		'user_id' => $transfer_moderator_id,
+		'category_id' => $getting_started_id,
+		'auth_option_id' => $kb_auth_option_ids['kb_m_change_author'],
+		'auth_setting' => ACL_YES,
+	]));
+	echo "    kb_transfer_moderator can change authors in Getting Started only.\n";
+}
+else
+{
+	echo "    Author-transfer permission unavailable in this KB checkout; scoped grant skipped.\n";
+}
+
 echo "==> Articles\n";
 /** @var \phpbbmodders\knowledgebase\inc\functions_kb $kb */
 $kb = $phpbb_container->get('phpbbmodders.knowledgebase.inc');
@@ -739,6 +758,12 @@ $article2_id = seed_create_article($articles_table, [
 	'author_type'           => \phpbbmodders\knowledgebase\inc\functions_kb::AUTHOR_TYPE_USER,
 ]);
 $kb->set_co_authors($article2_id, [$author2_id], [$team_group_id], $author1_id, \phpbbmodders\knowledgebase\inc\functions_kb::AUTHOR_TYPE_USER);
+// Keep a real pending revision during transfers, with its original submitter.
+$kb->save_article_revision($article2_id, array_merge([
+	'article_title' => 'Installing the Board - pending revision',
+	'article_description' => 'Updated installation notes awaiting approval.',
+], seed_format_article_text('Pending installation revision: verify that author transfers preserve this text and its submitter.', false, true)), $author1_id);
+
 
 // 3. Group-authored, unapproved article - exercises the moderation queue.
 $article3_id = seed_create_article($articles_table, [
@@ -1268,7 +1293,7 @@ $config->set('kb_num_articles', (int) $db->sql_fetchfield('submitted'));
 $db->sql_freeresult($result);
 
 echo "    article_id={$article1_id} Welcome to the Knowledge Base (active, has a private draft-of-an-edit)\n";
-echo "    article_id={$article2_id} Installing the Board (active, co-authored)\n";
+echo "    article_id={$article2_id} Installing the Board (active, co-authored, pending revision for author-transfer checks)\n";
 echo "    article_id={$article3_id} Extending via Events (pending approval, group-authored)\n";
 echo "    article_id={$article4_id} Performance Tuning (active, pending revision)\n";
 echo "    article_id={$article5_id} Troubleshooting Common Errors (pending approval)\n";

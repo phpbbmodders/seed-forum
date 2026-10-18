@@ -16,7 +16,7 @@ configuration before running it.
 
 ## Accounts And Teams
 
-All four KB test users use the disposable password `KbTest1234!`.
+All five KB test users use the disposable password `KbTest1234!`.
 
 | Account | Purpose |
 | --- | --- |
@@ -24,12 +24,26 @@ All four KB test users use the disposable password `KbTest1234!`.
 | `kb_author1` | Contributor; Operations and Documentation teams |
 | `kb_author2` | Contributor; KB and Documentation teams |
 | `kb_moderator` | Global moderation; all three teams |
+| `kb_transfer_moderator` | Change authors in Getting Started only; no KB administration |
 
 The three configured review teams are **KB Team**, **Operations Team**, and
 **Documentation Team**. Each has group-authored articles and assigned queue
 entries. Other entries are deliberately unassigned. Team membership is not the
 same as global moderation: category-scoped moderator permissions are present
 for KB Team in Events and Listeners and Operations Team in Team Runbooks.
+
+“Installing the Board” includes `kb_author2` and KB Team as co-authors and a
+pending revision submitted by `kb_author1`. These provide a user/team transfer
+case with a duplicate primary/co-author to remove, another co-author to retain,
+and revision content and submitter to preserve. Welcome's private draft edit
+provides the blocked-transfer case; Performance Tuning is outside the scoped
+moderator's category. `kb_reader` remains read-only.
+
+The scoped grant is added only when the installed extension exposes
+`kb_m_change_author`; older checkouts still seed successfully. These fixtures
+are created by the normal seed script, without browser-test preparation.
+Existing seed-ledger and duplicate-forum guards still require a fresh board
+before running the seed again.
 
 ## Category Trees
 
