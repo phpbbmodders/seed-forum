@@ -1,0 +1,21 @@
+# Disposable wiki test board: standard and wiki fixtures, the wiki checkout bind-mounted.
+variables:
+  PHPBB_ROOT: /home/william/Desktop/repos/seeded-board/wiki
+  WIKI_EXT_SRC: /home/william/Desktop/repos/phpbb-ext-wiki
+  SERVER_NAME: localhost
+  SERVER_PORT: '8094'
+  NGINX_SITE: /etc/nginx/sites-available/phpbb-wiki-test.conf
+
+board:
+  root: ${PHPBB_ROOT}
+  server_name: ${SERVER_NAME}
+  server_port: ${SERVER_PORT}
+  nginx_site: ${NGINX_SITE}
+  seeds:
+    - bin/seed-standard-fixtures.php
+
+extensions:
+  wiki:
+    source: ${WIKI_EXT_SRC}
+    seeds:
+      - bin/seed-wiki-fixtures.php

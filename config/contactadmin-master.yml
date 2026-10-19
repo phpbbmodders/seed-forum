@@ -1,0 +1,32 @@
+# Disposable phpBB master Contact Admin test board (contactadmin#41): standard
+# fixtures, with the contactadmin checkout bind-mounted.
+variables:
+  PHPBB_ROOT: /home/william/Desktop/repos/seeded-board/contactadmin-master
+
+  CONTACTADMIN_EXT_SRC: /home/william/Desktop/repos/contactadmin
+
+  SERVER_NAME: localhost
+
+  SERVER_PORT: '8110'
+
+  NGINX_SITE: /etc/nginx/sites-available/phpbb-contactadmin-master-test.conf
+
+board:
+  root: ${PHPBB_ROOT}
+
+  phpbb_branch: 'master'
+
+  server_name: ${SERVER_NAME}
+
+  server_port: ${SERVER_PORT}
+
+  nginx_site: ${NGINX_SITE}
+
+  seeds:
+    - bin/seed-standard-fixtures.php
+
+styles: {}
+
+extensions:
+  contactadmin:
+    source: ${CONTACTADMIN_EXT_SRC}
