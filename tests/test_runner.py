@@ -408,5 +408,71 @@ class RunnerTests(unittest.TestCase):
         mutation.assert_not_called()
 
 
+    def use_import(self, **settings):
+        """Configure board.import with a small dump file and no seeds."""
+        dump = self.base / 'real board.sql'
+        dump.write_text('CREATE DATABASE `realboard`;\nUSE `realboard`;\n')
+        for extension in self.document['extensions'].values():
+            extension['seeds'] = []
+        self.document['board']['import'] = {'sql': str(dump), 'db_port': 33200, **settings}
+        self.save()
+        return dump
+
+    def test_import_reset_hands_settings_to_the_backend(self):
+        (self.root / 'install.disabled').mkdir()
+        dump = self.use_import(login_users=[2, 14])
+        with patch.object(sys, 'argv', ['runner', '--config', str(self.config), '--reset', '--dry-run']), patch.object(runner, 'run') as backend, patch.object(runner.shutil, 'which', return_value='/usr/bin/tool') as which, contextlib.redirect_stdout(io.StringIO()):
+            runner.main()
+        self.assertIn('docker', [call.args[0] for call in which.call_args_list])
+        argv, kwargs = backend.call_args_list[0].args[0], backend.call_args_list[0].kwargs
+        self.assertEqual(str(argv[0]), 'bash')
+        settings = json.loads(kwargs['env']['SEED_FORUM_IMPORT'])
+        self.assertEqual(settings['sql'], str(dump))
+        self.assertEqual(settings['container'], 'seed-forum-board-with-spaces-db')
+        self.assertEqual(settings['image'], runner.IMPORT_IMAGE)
+        self.assertEqual(settings['table_prefix'], 'phpbb_')
+        self.assertEqual(settings['db_port'], '33200')
+        self.assertEqual(settings['login_users'], [2, 14])
+        self.assertIsNone(settings['database'])
+
+    def test_import_rejects_fixture_seeds(self):
+        self.use_import()
+        self.document['board']['seeds'] = ['bin/seed-standard-fixtures.php']
+        self.save()
+        with self.assertRaisesRegex(ValueError, 'Seeds build fixtures'):
+            runner.load_config(self.config)
+
+    def test_import_requires_its_own_database_port(self):
+        self.use_import(db_port=8092)
+        with self.assertRaisesRegex(ValueError, 'must differ'):
+            runner.load_config(self.config)
+        del self.document['board']['import']['db_port']
+        self.save()
+        with self.assertRaisesRegex(ValueError, 'db_port must be between'):
+            runner.load_config(self.config)
+
+    def test_import_rejects_bad_settings(self):
+        for settings, message in [({'login_users': ['14']}, 'login_users'), ({'login_users': [True]}, 'login_users'),
+                                  ({'table_prefix': 'phpbb-'}, 'table_prefix'), ({'container': '-db'}, 'container'),
+                                  ({'database': 'a;b'}, 'database'), ({'image': 'Maria DB'}, 'image'), ({'unknown': 1}, 'Unknown keys')]:
+            with self.subTest(settings=settings):
+                self.use_import(**settings)
+                with self.assertRaisesRegex(ValueError, message):
+                    runner.load_config(self.config)
+
+    def test_import_validation_needs_the_dump(self):
+        dump = self.use_import()
+        dump.unlink()
+        with patch.object(sys, 'argv', ['runner', '--config', str(self.config), '--validate']), self.assertRaisesRegex(ValueError, 'Missing board.import.sql'):
+            runner.main()
+
+    def test_status_reports_the_database_container(self):
+        self.use_import()
+        output = io.StringIO()
+        with patch.object(sys, 'argv', ['runner', '--config', str(self.config), '--status']), patch.object(runner, 'container_state', return_value='running'), patch.object(runner, 'is_mounted', return_value=False), patch.object(runner.subprocess, 'check_output', return_value=json.dumps({'enabled': [], 'disabled': [], 'available': []})), contextlib.redirect_stdout(output):
+            runner.main()
+        self.assertIn('Database container: seed-forum-board-with-spaces-db on 127.0.0.1:33200 (running)', output.getvalue())
+
+
 if __name__ == '__main__':
     unittest.main()

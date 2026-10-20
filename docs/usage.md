@@ -145,6 +145,52 @@ example: a 4.0 board on port 8095 with the standard and wiki fixtures and
 the [phpbb-ext-wiki](https://github.com/phpbbmodders/phpbb-ext-wiki)
 checkout. Replace its paths before use.
 
+## Importing A Real Board
+
+Instead of installing a fresh board, `--reset` can load a real board's
+MySQL or MariaDB dump (`mysqldump` output) into a disposable MariaDB container,
+to test extensions and styles against real posts and members. Add
+`board.import` and leave out every seed: fixtures are for fresh boards.
+
+```yaml
+board:
+  root: /path/to/seeded-board/real-copy
+  phpbb_branch: '3.3'
+  server_port: '8116'
+  nginx_site: /etc/nginx/sites-available/phpbb-real-copy.conf
+  import:
+    sql: /path/to/forum.sql
+    db_port: '33116'
+    login_users: [2, 14]
+```
+
+| Key | Meaning |
+| --- | --- |
+| `sql` | The dump to load. It is only read; the copy lives in the container. |
+| `db_port` | Required. The `127.0.0.1` port the container listens on; must differ from `server_port`. |
+| `database` | Only for a dump that doesn't name its own database (`USE` / `CREATE DATABASE`). |
+| `table_prefix` | Defaults to `phpbb_`. |
+| `image` | Defaults to `mariadb:11.8`. |
+| `container` | Defaults to `seed-forum-<board folder>-db`. |
+| `login_users` | Member IDs whose password becomes `KbTest1234!`, so you can sign in as them. |
+
+Reset then:
+
+1. replaces the board's container, refusing to touch a container another board or tool created;
+2. streams the dump into it;
+3. makes the copy safe to run locally: email, Jabber and SMTP off, every extension
+   of the real board disabled (their code isn't on this board), and the URL and
+   cookie settings pointed at `server_name` and `server_port`;
+4. writes `config.php`, then updates the database to the board's phpBB code
+   with `db:migrate` (a dump newer than the code is refused);
+5. mounts and enables the configured extensions, and installs configured styles,
+   as for any other board.
+
+The dump holds real members' email addresses, private messages and IP addresses,
+and the container now does too. Keep the board local, and remove the container when
+you are done; reset prints the command (`docker rm -f <container>`). `--status`
+shows the container and whether it is running.
+
 ## Styles
 
 Add local styles by directory name. Their parent style must already be installed
@@ -285,7 +331,7 @@ These credentials are public. Keep the board local; do not expose it to the inte
 Requires Bash, Python 3.9+ with PyYAML (`python3-yaml`), and PHP compatible
 with the board (phpBB 4.0 needs PHP 8.2 or newer). Reset also uses `jq` and
 `sqlite3`; a `3.3` reset uses `curl`, `unzip` and `sha256sum`, and a
-`master` reset uses `git` and `tar`. Mount/unmount and web-group permission repairs use `sudo`.
+`master` reset uses `git` and `tar`, and a reset with `board.import` uses Docker. Mount/unmount and web-group permission repairs use `sudo`.
 The permission setup assumes the local web group is `www-data`; `cache/`
 and `store/` permissions are repaired after enable, disable, seed, and purge
 commands, so folders the CLI creates there stay writable by the web server.
@@ -317,6 +363,7 @@ bin/reset-board.sh --validate
 - `bin/seed-forum.py`: config parsing, validation, selection, and operations.
 - `bin/rebuild-board.sh`: internal reset backend.
 - `bin/build-install-config.py`: builds installer YAML from the template.
+- `bin/import-dump.py`: loads a real board's dump into a disposable container (`board.import`).
 - `bin/nginx-site.py`: creates/enables or updates a board site with rollback.
 - `bin/run-seed.php`: seed ledger and execution lock.
 - `bin/seed-bootstrap.php`: shared phpBB bootstrap for standard fixtures and state checks.
@@ -328,6 +375,7 @@ bin/reset-board.sh --validate
 - `config/bare.yml`: original development-board profile; edit paths and style choices before use.
 - `config/wiki-master.yml`: phpBB 4.0 (master) wiki board example; edit its paths before use.
 - `config/install.yml.example`: phpBB installer settings template.
+- `config/import.yml.example`: example board built from a real board's dump; edit its paths before use.
 - `config/nginx-site.conf.example`: template for new nginx board sites.
 - `config/phpbb-bare.conf`: concrete localhost:8093 bare-board site example.
 - `tests/test_runner.py`: command and config regression tests.

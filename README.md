@@ -15,6 +15,7 @@ local, not internet-facing.
 - Download phpBB when the board directory is missing or empty: the 3.3.x release with SHA-256 verification, or phpBB 4.0 from the `master` branch through git (`board.phpbb_branch: master`).
 - Bind-mount local extensions and enable or disable them through phpBB's CLI.
 - Seed standard forum fixtures and optional Knowledgebase fixtures.
+- Build a board from a real board's MySQL/MariaDB dump instead, in a disposable local container, with mail and the real board's extensions switched off.
 - Copy and install local styles, with an optional default style.
 - Create or update an optional nginx site, with validation and rollback.
 - Run mount, unmount, seed, style and cache operations without resetting the database.
@@ -26,6 +27,7 @@ local, not internet-facing.
 - Python 3.9 or newer with PyYAML.
 - PHP CLI compatible with the board, including SQLite support (PHP 8.2 or newer for phpBB 4.0).
 - `jq` and `sqlite3` for reset operations, plus `curl`, `unzip` and `sha256sum` for 3.3 boards or `git` and `tar` for 4.0 boards.
+- Docker, only for boards built from a dump (`board.import`).
 - `sudo` access for mounts and permission repairs; the web group is `www-data`.
 - nginx and PHP-FPM only when using automatic nginx site setup.
 

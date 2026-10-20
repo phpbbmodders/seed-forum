@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # Rebuilds a disposable local phpBB board (3.3.x or 4.0 master) using SQLite,
-# with optional extensions enabled. Removes the board configuration, cache, and
+# or, with SEED_FORUM_IMPORT set, from a real board's MySQL/MariaDB dump loaded
+# into a disposable container (bin/import-dump.py), with optional extensions enabled. Removes the board configuration, cache, and
 # store/ contents (database and extension data; phpBB's .htaccess and index.htm
 # stay). Positional arguments are extension checkout directories validated
 # by the public runner. Prints install progress; any failing command stops the
@@ -19,6 +20,8 @@
 #   NGINX_SITE   nginx sites-available path; when enabled, create/update its
 #                root, host and port, enable it, validate and reload nginx
 #   PHP_FPM_SOCKET optional new-site socket override, otherwise auto-detected
+#   SEED_FORUM_IMPORT optional JSON of board.import settings; replaces the
+#                installer with bin/import-dump.py
 
 set -Eeuo pipefail
 
@@ -212,21 +215,29 @@ for i in "${!EXT_SOURCES[@]}"; do
 	printf '%s\n' "$ext_target" >> "$MANAGED_EXTS_FILE"
 done
 
-echo "==> Generating install config"
-INSTALL_YML="$(mktemp)"
-trap 'rm -f "$INSTALL_YML"' EXIT
-PHPBB_ROOT="$PHPBB_ROOT" SERVER_NAME="$SERVER_NAME" SERVER_PORT="$SERVER_PORT" \
-	python3 "$SCRIPT_DIR/build-install-config.py" "${EXT_NAMES[@]}" > "$INSTALL_YML"
+if [ -n "${SEED_FORUM_IMPORT:-}" ]; then
+	# An imported board is already installed, so install/ is set aside first:
+	# nobody should be able to run the installer over the imported data.
+	echo "==> Disabling install/ before importing"
+	mv "$PHPBB_ROOT/install" "$PHPBB_ROOT/install.disabled"
+	python3 "$SCRIPT_DIR/import-dump.py" "${EXT_NAMES[@]}"
+else
+	echo "==> Generating install config"
+	INSTALL_YML="$(mktemp)"
+	trap 'rm -f "$INSTALL_YML"' EXIT
+	PHPBB_ROOT="$PHPBB_ROOT" SERVER_NAME="$SERVER_NAME" SERVER_PORT="$SERVER_PORT" \
+		python3 "$SCRIPT_DIR/build-install-config.py" "${EXT_NAMES[@]}" > "$INSTALL_YML"
 
-echo "==> Running the phpBB CLI installer"
-(cd "$PHPBB_ROOT" && php install/phpbbcli.php install "$INSTALL_YML" -n)
+	echo "==> Running the phpBB CLI installer"
+	(cd "$PHPBB_ROOT" && php install/phpbbcli.php install "$INSTALL_YML" -n)
 
-# A fresh install always resets assets_version back to a low number
-# (currently 2), which a browser from an earlier session/board on this
-# same origin may already have cached CSS/JS under - it'd keep serving
-# that stale response since the cache key (URL + query string) matches.
-# A timestamp is guaranteed higher than anything previously cached.
-sqlite3 "$PHPBB_ROOT/store/sqlite.db" "UPDATE phpbb_config SET config_value = $(date +%s) WHERE config_name = 'assets_version';"
+	# A fresh install always resets assets_version back to a low number
+	# (currently 2), which a browser from an earlier session/board on this
+	# same origin may already have cached CSS/JS under - it'd keep serving
+	# that stale response since the cache key (URL + query string) matches.
+	# A timestamp is guaranteed higher than anything previously cached.
+	sqlite3 "$PHPBB_ROOT/store/sqlite.db" "UPDATE phpbb_config SET config_value = $(date +%s) WHERE config_name = 'assets_version';"
+fi
 
 echo "==> Fixing permissions for the web server group (www-data)"
 for d in cache store files config images/avatars/upload; do
@@ -254,8 +265,10 @@ done
 # is present (it shows the board-disabled notice instead) - rename it
 # aside like a real deployment would, and restore it next time this
 # script runs so the installer can use it again.
-echo "==> Disabling install/ so the board actually serves pages"
-mv "$PHPBB_ROOT/install" "$PHPBB_ROOT/install.disabled"
+if [ -d "$PHPBB_ROOT/install" ]; then
+	echo "==> Disabling install/ so the board actually serves pages"
+	mv "$PHPBB_ROOT/install" "$PHPBB_ROOT/install.disabled"
+fi
 
 # Configure this board's site without changing any other site's directives.
 # The helper creates missing sites, updates existing listeners, validates nginx,
