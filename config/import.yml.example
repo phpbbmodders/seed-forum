@@ -1,0 +1,40 @@
+# Disposable phpBB 3.3 board built from a real board's MySQL/MariaDB dump
+# (board.import) instead of a fresh install. The dump is only read; its copy
+# lives in a local container that holds real members' data, so keep the board
+# local and remove the container when done (reset prints the command).
+variables:
+  PHPBB_ROOT: /path/to/seeded-board/real-copy
+
+  DUMP_SQL: /path/to/forum.sql
+
+  SERVER_NAME: localhost
+
+  SERVER_PORT: '8116'
+
+  # The container's port on 127.0.0.1; must differ from SERVER_PORT.
+  DB_PORT: '33116'
+
+  NGINX_SITE: /etc/nginx/sites-available/phpbb-real-copy.conf
+
+board:
+  root: ${PHPBB_ROOT}
+
+  phpbb_branch: '3.3'
+
+  server_name: ${SERVER_NAME}
+
+  server_port: ${SERVER_PORT}
+
+  nginx_site: ${NGINX_SITE}
+
+  import:
+    sql: ${DUMP_SQL}
+
+    db_port: ${DB_PORT}
+
+    # Member IDs that get the fixture password KbTest1234!, to sign in as them.
+    login_users: []
+
+styles: {}
+
+extensions: {}

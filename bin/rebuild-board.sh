@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 #
 # Rebuilds a disposable local phpBB board (3.3.x or 4.0 master) on SQLite or,
-# with DB_ENGINE set, a fresh database container (see bin/db-container.py),
-# with optional extensions enabled. Removes the board configuration, cache, and
+# with DB_ENGINE set, a fresh database container (see bin/db-container.py), or,
+# with SEED_FORUM_IMPORT set, from a real board's MySQL/MariaDB dump loaded into
+# a disposable container (bin/import-dump.py), with optional extensions
+# enabled. Removes the board configuration, cache, and
 # store/ contents (database and extension data; phpBB's .htaccess and index.htm
 # stay). Positional arguments are extension checkout directories validated
 # by the public runner. Prints install progress; any failing command stops the
@@ -22,6 +24,8 @@
 #   PHP_FPM_SOCKET optional new-site socket override, otherwise auto-detected
 #   DB_ENGINE    sqlite (default), mysql, mariadb, postgres or mssql; any but
 #                sqlite starts a new database container and drops the old one
+#   SEED_FORUM_IMPORT optional JSON of board.import settings; replaces the
+#                installer with bin/import-dump.py (DB_ENGINE stays sqlite)
 
 set -Eeuo pipefail
 
@@ -229,50 +233,58 @@ for i in "${!EXT_SOURCES[@]}"; do
 	printf '%s\n' "$ext_target" >> "$MANAGED_EXTS_FILE"
 done
 
-echo "==> Generating install config"
-# Inside the board, not /tmp, so the installer can read it when PHP runs in a
-# container (MSSQL); it holds the database password, so only the owner may read it.
-INSTALL_YML="$PHPBB_ROOT/store/.seed-forum-install.yml"
-trap 'rm -f "$INSTALL_YML"' EXIT
-# No extensions here: they are enabled through phpBB's CLI after the install,
-# below. The 3.3 installer hides why an extension failed to enable, then stops
-# before its last step with exit 0, leaving store/install_config.php behind.
-# An empty list makes the installer enable every extension it finds (phpBB
-# 3.3 ships phpbb/viglink); those are purged again below.
-(umask 077 && PHPBB_ROOT="$PHPBB_ROOT" SERVER_NAME="$SERVER_NAME" SERVER_PORT="$SERVER_PORT" \
-	python3 "$SCRIPT_DIR/build-install-config.py" > "$INSTALL_YML")
+if [ -n "${SEED_FORUM_IMPORT:-}" ]; then
+	# An imported board is already installed, so install/ is set aside first:
+	# nobody should be able to run the installer over the imported data.
+	echo "==> Disabling install/ before importing"
+	mv "$PHPBB_ROOT/install" "$PHPBB_ROOT/install.disabled"
+	python3 "$SCRIPT_DIR/import-dump.py"
+else
+	echo "==> Generating install config"
+	# Inside the board, not /tmp, so the installer can read it when PHP runs in a
+	# container (MSSQL); it holds the database password, so only the owner may read it.
+	INSTALL_YML="$PHPBB_ROOT/store/.seed-forum-install.yml"
+	trap 'rm -f "$INSTALL_YML"' EXIT
+	# No extensions here: they are enabled through phpBB's CLI after the install,
+	# below. The 3.3 installer hides why an extension failed to enable, then stops
+	# before its last step with exit 0, leaving store/install_config.php behind.
+	# An empty list makes the installer enable every extension it finds (phpBB
+	# 3.3 ships phpbb/viglink); those are purged again below.
+	(umask 077 && PHPBB_ROOT="$PHPBB_ROOT" SERVER_NAME="$SERVER_NAME" SERVER_PORT="$SERVER_PORT" \
+		python3 "$SCRIPT_DIR/build-install-config.py" > "$INSTALL_YML")
 
-echo "==> Running the phpBB CLI installer"
-# -v prints the installer's log lines; without it a failed extension enable
-# ("could not be enabled") is silent and the install stops part-way with exit 0.
-(cd "$PHPBB_ROOT" && board_php install/phpbbcli.php install "$INSTALL_YML" -n -v)
-rm -f "$INSTALL_YML"
-trap - EXIT
+	echo "==> Running the phpBB CLI installer"
+	# -v prints the installer's log lines; without it a failed extension enable
+	# ("could not be enabled") is silent and the install stops part-way with exit 0.
+	(cd "$PHPBB_ROOT" && board_php install/phpbbcli.php install "$INSTALL_YML" -n -v)
+	rm -f "$INSTALL_YML"
+	trap - EXIT
 
-# A fresh install always resets assets_version back to a low number
-# (currently 2), which a browser from an earlier session/board on this
-# same origin may already have cached CSS/JS under - it'd keep serving
-# that stale response since the cache key (URL + query string) matches.
-# A timestamp is guaranteed higher than anything previously cached.
-(cd "$PHPBB_ROOT" && board_php bin/phpbbcli.php config:set assets_version "$(date +%s)" --no-interaction)
+	# A fresh install always resets assets_version back to a low number
+	# (currently 2), which a browser from an earlier session/board on this
+	# same origin may already have cached CSS/JS under - it'd keep serving
+	# that stale response since the cache key (URL + query string) matches.
+	# A timestamp is guaranteed higher than anything previously cached.
+	(cd "$PHPBB_ROOT" && board_php bin/phpbbcli.php config:set assets_version "$(date +%s)" --no-interaction)
 
-if [ -f "$PHPBB_ROOT/store/install_config.php" ]; then
-	echo "The phpBB installer stopped before finishing (store/install_config.php is still there)." >&2
-	exit 1
-fi
-
-# Reset extensions the installer enabled, then enable only the configured ones.
-state="$(cd "$PHPBB_ROOT" && board_php "$SCRIPT_DIR/extension-state.php" "$PHPBB_ROOT")"
-# Read the list before calling PHP. The SQL Server wrapper uses docker run -i
-# and can consume the remaining names if the loop feeds them through stdin.
-mapfile -t installer_enabled < <(jq -r '.enabled[]' <<< "$state")
-for ext_name in "${installer_enabled[@]}"; do
-	if [ -n "$ext_name" ]; then
-		echo "==> Removing installer-enabled extension $ext_name"
-		(cd "$PHPBB_ROOT" && board_php bin/phpbbcli.php extension:disable "$ext_name" --no-interaction)
-		(cd "$PHPBB_ROOT" && board_php bin/phpbbcli.php extension:purge "$ext_name" --no-interaction)
+	if [ -f "$PHPBB_ROOT/store/install_config.php" ]; then
+		echo "The phpBB installer stopped before finishing (store/install_config.php is still there)." >&2
+		exit 1
 	fi
-done
+
+	# Reset extensions the installer enabled, then enable only the configured ones.
+	state="$(cd "$PHPBB_ROOT" && board_php "$SCRIPT_DIR/extension-state.php" "$PHPBB_ROOT")"
+	# Read the list before calling PHP. The SQL Server wrapper uses docker run -i
+	# and can consume the remaining names if the loop feeds them through stdin.
+	mapfile -t installer_enabled < <(jq -r '.enabled[]' <<< "$state")
+	for ext_name in "${installer_enabled[@]}"; do
+		if [ -n "$ext_name" ]; then
+			echo "==> Removing installer-enabled extension $ext_name"
+			(cd "$PHPBB_ROOT" && board_php bin/phpbbcli.php extension:disable "$ext_name" --no-interaction)
+			(cd "$PHPBB_ROOT" && board_php bin/phpbbcli.php extension:purge "$ext_name" --no-interaction)
+		fi
+	done
+fi
 
 # Enable extensions the way an admin would, in config order; phpBB's own error
 # stops the reset if one can't be enabled.
@@ -312,8 +324,10 @@ done
 # is present (it shows the board-disabled notice instead) - rename it
 # aside like a real deployment would, and restore it next time this
 # script runs so the installer can use it again.
-echo "==> Disabling install/ so the board actually serves pages"
-mv "$PHPBB_ROOT/install" "$PHPBB_ROOT/install.disabled"
+if [ -d "$PHPBB_ROOT/install" ]; then
+	echo "==> Disabling install/ so the board actually serves pages"
+	mv "$PHPBB_ROOT/install" "$PHPBB_ROOT/install.disabled"
+fi
 
 # Configure this board's site without changing any other site's directives.
 # The helper creates missing sites, updates existing listeners, validates nginx,

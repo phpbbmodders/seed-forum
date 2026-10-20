@@ -25,6 +25,9 @@ PHPBB_BRANCHES = ("3.3", "master")
 DATABASES = ("sqlite", "mysql", "mariadb", "postgres", "mssql")
 # Host PHP-FPM packages have no MSSQL driver, so nginx can't serve those boards.
 NO_NGINX_DATABASES = ("mssql",)
+# board.import defaults: a pinned MariaDB LTS image and phpBB's usual table prefix.
+IMPORT_IMAGE = "mariadb:11.8"
+IMPORT_TABLE_PREFIX = "phpbb_"
 
 
 def fail(message):
@@ -132,7 +135,7 @@ def load_config(path):
             fail(f"{context} must contain PHP scripts")
         return result
 
-    board = mapping(document.get("board"), "board", {"root", "seeds", "server_name", "server_port", "nginx_site", "phpbb_branch", "database"})
+    board = mapping(document.get("board"), "board", {"root", "seeds", "server_name", "server_port", "nginx_site", "phpbb_branch", "database", "import"})
     root = path_value(board.get("root"), path.parent)
     if root == Path(root.anchor) or root == REPO or root in REPO.parents:
         fail("board.root must be a dedicated board directory")
@@ -158,9 +161,12 @@ def load_config(path):
         "database": database,
         "nginx_site": path_value(board["nginx_site"], path.parent) if board.get("nginx_site") else None,
         "seeds": scripts(board.get("seeds", []), "board.seeds"),
+        "import": None,
         "extensions": {},
         "styles": {},
     }
+    if board.get("import") is not None:
+        result["import"] = import_settings(mapping(board["import"], "board.import", {"sql", "database", "table_prefix", "image", "container", "db_port", "login_users"}), expand, path_value, path.parent, root, port)
     for label, entry in mapping(document.get("extensions", {}), "extensions").items():
         if not re.fullmatch(r"[A-Za-z0-9_-]+", label):
             fail(f"Invalid extension label: {label}")
@@ -179,7 +185,45 @@ def load_config(path):
         result["styles"][label] = {"source": path_value(entry.get("source"), path.parent), "default": default}
     if sum(style["default"] for style in result["styles"].values()) > 1:
         fail("Only one style may be the default")
+    if result["import"] and (result["seeds"] or any(ext["seeds"] for ext in result["extensions"].values())):
+        fail("Seeds build fixtures on a fresh board; remove them from a config that uses board.import")
+    if result["import"] and result["database"] != "sqlite":
+        fail("board.import loads the dump into its own MariaDB container; remove board.database from a config that uses it")
     return result
+
+
+def import_settings(entry, expand, path_value, base, root, server_port):
+    """Validate board.import and return its settings with defaults filled in.
+
+    sql is the dump to load (it is only ever read); database is needed only when
+    the dump doesn't name its own; db_port is the 127.0.0.1 port for the
+    container; login_users lists member IDs that get the fixture password.
+    """
+    settings = {
+        "sql": path_value(entry.get("sql"), base),
+        "database": expand(entry["database"]) if entry.get("database") is not None else None,
+        "table_prefix": expand(entry.get("table_prefix", IMPORT_TABLE_PREFIX)),
+        "image": expand(entry.get("image", IMPORT_IMAGE)),
+        "container": expand(entry.get("container", "seed-forum-" + re.sub(r"[^a-z0-9]+", "-", root.name.lower()).strip("-") + "-db")),
+        "db_port": expand(str(entry.get("db_port", ""))) if entry.get("db_port") is not None else "",
+        "login_users": entry.get("login_users", []),
+    }
+    if settings["database"] is not None and not re.fullmatch(r"[A-Za-z0-9_$]+", settings["database"]):
+        fail("board.import.database may only contain letters, digits, _ and $")
+    if not re.fullmatch(r"[A-Za-z0-9_]+", settings["table_prefix"]):
+        fail("board.import.table_prefix may only contain letters, digits and _")
+    if not re.fullmatch(r"[a-z0-9][a-z0-9._/:-]*", settings["image"]):
+        fail("board.import.image must be a Docker image name such as mariadb:11.8")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", settings["container"]):
+        fail("board.import.container must be a valid Docker container name")
+    if not settings["db_port"].isdigit() or not 1 <= int(settings["db_port"]) <= 65535:
+        fail("board.import.db_port must be between 1 and 65535")
+    if settings["db_port"] == server_port:
+        fail("board.import.db_port must differ from board.server_port")
+    users = settings["login_users"]
+    if not isinstance(users, list) or any(isinstance(user, bool) or not isinstance(user, int) or user < 1 for user in users):
+        fail("board.import.login_users must be a list of member IDs")
+    return settings
 
 
 def package(source):
@@ -250,6 +294,12 @@ def extension_state(root):
     return json.loads(output)
 
 
+def container_state(name):
+    """Return a Docker container's state (running, exited, ...) or 'missing'."""
+    result = subprocess.run(["docker", "inspect", "--format", "{{.State.Status}}", name], capture_output=True, text=True, check=False)
+    return result.stdout.strip() if result.returncode == 0 else "missing"
+
+
 def cli(root, command, dry=False):
     """Run a noninteractive phpBB command from the configured board root."""
     run([*board_php(root), root / "bin/phpbbcli.php", *command, "--no-interaction"], cwd=root, dry=dry)
@@ -314,6 +364,8 @@ def main():
 
     config = load_config(args.config.resolve())
     root = config["root"]
+    if config["import"] and (args.reset or args.validate) and not config["import"]["sql"].is_file():
+        fail(f"Missing board.import.sql dump: {config['import']['sql']}")
     if args.reset or args.install_styles or args.validate:
         for label, style in config["styles"].items():
             source = style["source"]
@@ -370,9 +422,14 @@ def main():
     if args.status:
         print(f"Board: {root} ({'installed' if (root / 'config.php').is_file() else 'not installed'})")
         print(f"phpBB branch: {config['phpbb_branch']}")
-        print(f"Database: {config['database']}")
+        print(f"Database: {'MariaDB, imported from a dump' if config['import'] else config['database']}")
         if config['database'] != 'sqlite':
             run(['python3', REPO / 'bin/db-container.py', 'status', root], dry=args.dry_run)
+        if config["import"]:
+            settings = config["import"]
+            state = "not checked (dry run)" if args.dry_run else container_state(settings["container"])
+            print(f"Imported from: {settings['sql']}")
+            print(f"Database container: {settings['container']} on 127.0.0.1:{settings['db_port']} ({state})")
         # Configured values do not imply that nginx is listening on this port.
         print(f"Configured port: {config['server_port']}")
         print(f"Configured URL: http://{config['server_name']}:{config['server_port']}/")
@@ -429,7 +486,7 @@ def main():
                 if extension['seeds'] and extension['name'] not in state['enabled']:
                     fail(f"Enable {label} before running its seeds")
 
-    required = ['php']
+    required = ['php'] + (['docker'] if args.reset and config['import'] else [])
     if args.reset and config['phpbb_branch'] == 'master':
         required += ['bash', 'jq', 'git', 'tar', 'sudo']
     elif args.reset:
@@ -449,6 +506,11 @@ def main():
             print(f'Reset: remove config.php and store/ contents (database, extension data) under {root}, reinstall phpBB {config["phpbb_branch"]} on {config["database"]}, mount and enable: {", ".join(sorted(names)) or "no extensions"}')
         env = os.environ.copy()
         env.update(PHPBB_ROOT=str(root), PHPBB_BRANCH=config["phpbb_branch"], DB_ENGINE=config["database"], SEED_FORUM_CONFIGURED="1", SERVER_NAME=config["server_name"], SERVER_PORT=config["server_port"], NGINX_SITE=str(config["nginx_site"] or root / ".no-nginx-site"), SEED_FORUM_NGINX_ENABLED='1' if config['nginx_site'] else '0')
+        if config["import"]:
+            settings = config["import"]
+            env["SEED_FORUM_IMPORT"] = json.dumps({**settings, "sql": str(settings["sql"])})
+            if args.dry_run:
+                print(f'Import: replace container {settings["container"]} ({settings["image"]}) on 127.0.0.1:{settings["db_port"]}, load {settings["sql"]} (read only), turn mail and the real board\'s extensions off, update the database with db:migrate')
         if config['nginx_site']:
             # Validate site shape and new-site socket selection before wiping data.
             subprocess.run(['python3', str(REPO / 'bin/nginx-site.py'), '--check'], env=env, check=True)
@@ -527,7 +589,14 @@ def main():
     if args.reset and not args.dry_run:
         # Keep the board summary last so it isn't buried under seed/style output.
         print(f"    Board root:   {root}")
-        print("    Admin login:  admin / KbTest1234!")
+        if config["import"]:
+            settings = config["import"]
+            users = ", ".join(str(user) for user in settings["login_users"]) or "none (set board.import.login_users)"
+            print(f"    Logins:       member IDs {users} / KbTest1234!")
+            print(f"    Database:     container {settings['container']} on 127.0.0.1:{settings['db_port']}; it holds real members' data")
+            print(f"    Remove it:    docker rm -f {settings['container']}")
+        else:
+            print("    Admin login:  admin / KbTest1234!")
         print(f"    Board URL:    http://{config['server_name']}:{config['server_port']}/")
 
 
