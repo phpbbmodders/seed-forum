@@ -2,17 +2,19 @@
 
 [![Tests](https://github.com/phpbbmodders/seed-forum/actions/workflows/tests.yml/badge.svg)](https://github.com/phpbbmodders/seed-forum/actions/workflows/tests.yml)
 
-Set up disposable local phpBB boards, 3.3.x or 4.0 (master), with SQLite,
-test fixtures, extension checkouts and optional styles. Configuration is stored in YAML.
+Set up disposable local phpBB boards, 3.3.x or 4.0 (master), on SQLite, MySQL,
+MariaDB, PostgreSQL or MSSQL, with test fixtures, extension checkouts and optional styles.
+Configuration is stored in YAML.
 
 **Only use this tooling with disposable boards.** `--reset` deletes the
-board's configuration, SQLite database and cached state before reinstalling.
+board's configuration, database and cached state before reinstalling.
 The installer and fixture users have public test credentials. Keep boards
 local, not internet-facing.
 
 ## Features
 
 - Download phpBB when the board directory is missing or empty: the 3.3.x release with SHA-256 verification, or phpBB 4.0 from the `master` branch through git (`board.phpbb_branch: master`).
+- Install on SQLite, or on MySQL, MariaDB, PostgreSQL or MSSQL in a fresh Docker container that only listens on 127.0.0.1 (`board.database`).
 - Bind-mount local extensions and enable or disable them through phpBB's CLI.
 - Seed standard forum fixtures and optional Knowledgebase fixtures.
 - Copy and install local styles, with an optional default style.
@@ -24,8 +26,9 @@ local, not internet-facing.
 
 - Linux with Bash, bind-mount support and `mountpoint` (util-linux).
 - Python 3.9 or newer with PyYAML.
-- PHP CLI compatible with the board, including SQLite support (PHP 8.2 or newer for phpBB 4.0).
-- `jq` and `sqlite3` for reset operations, plus `curl`, `unzip` and `sha256sum` for 3.3 boards or `git` and `tar` for 4.0 boards.
+- PHP CLI compatible with the board, including SQLite support (PHP 8.2 or newer for phpBB 4.0), and the `mysqli` or `pgsql` extension for MySQL, MariaDB or PostgreSQL boards.
+- `jq` for reset operations, `sqlite3` for SQLite boards, plus `curl`, `unzip` and `sha256sum` for 3.3 boards or `git` and `tar` for 4.0 boards.
+- Docker for boards on any database but SQLite. MSSQL boards also run PHP in a container built from `docker/php-drivers/`, because PHP packages for Linux hosts don't include the MSSQL driver; starting one accepts Microsoft's SQL Server Developer licence.
 - `sudo` access for mounts and permission repairs; the web group is `www-data`.
 - nginx and PHP-FPM only when using automatic nginx site setup.
 

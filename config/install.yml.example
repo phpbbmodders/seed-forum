@@ -12,6 +12,7 @@ installer:
         name: phpBB Test Board
         description: Local board for forum and extension fixtures
     # Both SQLite path fields resolve to the database inside the board root.
+    # A board with board.database set gets its container's details instead.
     database:
         dbms: sqlite3
         dbhost: {{PHPBB_ROOT}}/store/sqlite.db

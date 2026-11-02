@@ -35,6 +35,10 @@ board:
   # Optional nginx site: --reset creates/enables it and updates root/host/port.
   nginx_site: ${NGINX_SITE}
 
+  # Optional: sqlite (default), mysql, mariadb, postgres or mssql. Any but
+  # sqlite gets a fresh Docker container on each reset (docs/usage.md, Database).
+  database: sqlite
+
   # Board-wide PHP seeds run first. Paths resolve from the tooling repository.
   # Use [] for a KB-only board; --only excludes these board-wide scripts.
   seeds:

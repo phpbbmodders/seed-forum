@@ -21,6 +21,10 @@ VARIABLE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 PACKAGE = re.compile(r"[a-z0-9_.-]+/[a-z0-9_.-]+")
 # board.phpbb_branch values: 3.3 is the current release, master is phpBB 4.0.
 PHPBB_BRANCHES = ("3.3", "master")
+# board.database values; anything but sqlite runs in a container (bin/db-container.py).
+DATABASES = ("sqlite", "mysql", "mariadb", "postgres", "mssql")
+# Host PHP-FPM packages have no MSSQL driver, so nginx can't serve those boards.
+NO_NGINX_DATABASES = ("mssql",)
 
 
 def fail(message):
@@ -128,7 +132,7 @@ def load_config(path):
             fail(f"{context} must contain PHP scripts")
         return result
 
-    board = mapping(document.get("board"), "board", {"root", "seeds", "server_name", "server_port", "nginx_site", "phpbb_branch"})
+    board = mapping(document.get("board"), "board", {"root", "seeds", "server_name", "server_port", "nginx_site", "phpbb_branch", "database"})
     root = path_value(board.get("root"), path.parent)
     if root == Path(root.anchor) or root == REPO or root in REPO.parents:
         fail("board.root must be a dedicated board directory")
@@ -140,11 +144,18 @@ def load_config(path):
     branch = expand(str(branch) if isinstance(branch, (int, float)) and not isinstance(branch, bool) else branch)
     if branch not in PHPBB_BRANCHES:
         fail(f"board.phpbb_branch must be one of: {', '.join(PHPBB_BRANCHES)}")
+    database = expand(str(board.get("database", "sqlite")))
+    if database not in DATABASES:
+        fail(f"board.database must be one of: {', '.join(DATABASES)}")
+    if database in NO_NGINX_DATABASES and board.get("nginx_site"):
+        fail(f"board.database {database} can't be served by nginx (host PHP has no {database} driver); "
+             "remove board.nginx_site and serve the board with bin/serve-board.py")
     result = {
         "root": root,
         "server_name": expand(board.get("server_name", "localhost")),
         "server_port": port,
         "phpbb_branch": branch,
+        "database": database,
         "nginx_site": path_value(board["nginx_site"], path.parent) if board.get("nginx_site") else None,
         "seeds": scripts(board.get("seeds", []), "board.seeds"),
         "extensions": {},
@@ -228,15 +239,20 @@ def save_mounts(root, targets):
         manifest.unlink(missing_ok=True)
 
 
+def board_php(root):
+    """Return the argv prefix that runs PHP for this board (host or driver container)."""
+    return ["python3", REPO / "bin/board-php.py", root]
+
+
 def extension_state(root):
     """Return phpBB's enabled, disabled and available extension names for the board."""
-    output = subprocess.check_output(['php', str(REPO / 'bin/extension-state.php'), str(root)], cwd=root, text=True)
+    output = subprocess.check_output([str(arg) for arg in board_php(root)] + [str(REPO / 'bin/extension-state.php'), str(root)], cwd=root, text=True)
     return json.loads(output)
 
 
 def cli(root, command, dry=False):
     """Run a noninteractive phpBB command from the configured board root."""
-    run(["php", root / "bin/phpbbcli.php", *command, "--no-interaction"], cwd=root, dry=dry)
+    run([*board_php(root), root / "bin/phpbbcli.php", *command, "--no-interaction"], cwd=root, dry=dry)
 
 
 def web_group_writable(root: Path, folders: tuple, dry: bool) -> None:
@@ -354,6 +370,9 @@ def main():
     if args.status:
         print(f"Board: {root} ({'installed' if (root / 'config.php').is_file() else 'not installed'})")
         print(f"phpBB branch: {config['phpbb_branch']}")
+        print(f"Database: {config['database']}")
+        if config['database'] != 'sqlite':
+            run(['python3', REPO / 'bin/db-container.py', 'status', root], dry=args.dry_run)
         # Configured values do not imply that nginx is listening on this port.
         print(f"Configured port: {config['server_port']}")
         print(f"Configured URL: http://{config['server_name']}:{config['server_port']}/")
@@ -374,7 +393,7 @@ def main():
             print(f"Managed: {target}; mounted={is_mounted(target)}")
         if (root / "config.php").is_file():
             if args.dry_run:
-                run(['php', REPO / 'bin/extension-state.php', root], dry=True)
+                run([*board_php(root), REPO / 'bin/extension-state.php', root], dry=True)
             else:
                 state = extension_state(root)
                 print('Enabled: ' + ', '.join(state['enabled']))
@@ -405,16 +424,20 @@ def main():
             if str(script) in previous:
                 fail(f"Seed already attempted ({previous[str(script)]}): {script}; reset before repeating")
         if not args.dry_run and not args.enable:
-            state = json.loads(subprocess.check_output(['php', str(REPO / 'bin/extension-state.php'), str(root)], cwd=root, text=True))
+            state = extension_state(root)
             for label, extension in extensions:
                 if extension['seeds'] and extension['name'] not in state['enabled']:
                     fail(f"Enable {label} before running its seeds")
 
     required = ['php']
     if args.reset and config['phpbb_branch'] == 'master':
-        required += ['bash', 'jq', 'sqlite3', 'git', 'tar', 'sudo']
+        required += ['bash', 'jq', 'git', 'tar', 'sudo']
     elif args.reset:
-        required += ['bash', 'jq', 'sqlite3', 'curl', 'unzip', 'sha256sum', 'sudo']
+        required += ['bash', 'jq', 'curl', 'unzip', 'sha256sum', 'sudo']
+    if args.reset and config['database'] == 'sqlite':
+        required += ['sqlite3']
+    if config['database'] != 'sqlite':
+        required += ['docker']
     elif args.mount or args.remount or args.unmount or args.enable or args.disable or args.purge_cache or args.seed_only or args.install_styles:
         required += ['sudo']
     for command in required:
@@ -423,9 +446,9 @@ def main():
 
     if args.reset:
         if args.dry_run:
-            print(f'Reset: remove config.php and store/ contents (database, extension data) under {root}, reinstall phpBB {config["phpbb_branch"]}, mount and enable: {", ".join(sorted(names)) or "no extensions"}')
+            print(f'Reset: remove config.php and store/ contents (database, extension data) under {root}, reinstall phpBB {config["phpbb_branch"]} on {config["database"]}, mount and enable: {", ".join(sorted(names)) or "no extensions"}')
         env = os.environ.copy()
-        env.update(PHPBB_ROOT=str(root), PHPBB_BRANCH=config["phpbb_branch"], SEED_FORUM_CONFIGURED="1", SERVER_NAME=config["server_name"], SERVER_PORT=config["server_port"], NGINX_SITE=str(config["nginx_site"] or root / ".no-nginx-site"), SEED_FORUM_NGINX_ENABLED='1' if config['nginx_site'] else '0')
+        env.update(PHPBB_ROOT=str(root), PHPBB_BRANCH=config["phpbb_branch"], DB_ENGINE=config["database"], SEED_FORUM_CONFIGURED="1", SERVER_NAME=config["server_name"], SERVER_PORT=config["server_port"], NGINX_SITE=str(config["nginx_site"] or root / ".no-nginx-site"), SEED_FORUM_NGINX_ENABLED='1' if config['nginx_site'] else '0')
         if config['nginx_site']:
             # Validate site shape and new-site socket selection before wiping data.
             subprocess.run(['python3', str(REPO / 'bin/nginx-site.py'), '--check'], env=env, check=True)
@@ -483,14 +506,14 @@ def main():
             cli(root, ["extension:enable", extension["name"]], dry=args.dry_run)
     if args.seed_only or (args.reset and not args.skip_seed):
         for script in seeds:
-            run(["php", REPO / "bin/run-seed.php", root, script], dry=args.dry_run)
+            run([*board_php(root), REPO / "bin/run-seed.php", root, script], dry=args.dry_run)
     if args.reset or args.install_styles:
         for label, style in config["styles"].items():
             target = root / "styles" / label
             print(f"Copy style: {style['source']} -> {target}", flush=True)
             if not args.dry_run:
                 shutil.copytree(style["source"], target, dirs_exist_ok=True, ignore=shutil.ignore_patterns('.git'))
-            run(["php", REPO / "bin/install-style.php", root, label, "1" if style["default"] else "0"], dry=args.dry_run)
+            run([*board_php(root), REPO / "bin/install-style.php", root, label, "1" if style["default"] else "0"], dry=args.dry_run)
     if args.purge_cache or ((args.reset or args.install_styles) and config["styles"]):
         # The web server writes compiled templates into folders only it may change; the
         # CLI purge cannot delete those (and says nothing), so open them to the group first.
