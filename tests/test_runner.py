@@ -313,6 +313,66 @@ class RunnerTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 runner.load_config(self.config)
 
+    def test_database_defaults_to_sqlite_and_accepts_container_engines(self):
+        self.assertEqual(runner.load_config(self.config)['database'], 'sqlite')
+        for value in ['mysql', 'mariadb', 'postgres', 'mssql', 'sqlite']:
+            self.document['board']['database'] = value
+            self.save()
+            self.assertEqual(runner.load_config(self.config)['database'], value)
+
+    def test_unknown_database_is_rejected(self):
+        for value in ['oracle', 'MySQL', 'sqlite3', True]:
+            self.document['board']['database'] = value
+            self.save()
+            with self.assertRaisesRegex(ValueError, 'board.database'):
+                runner.load_config(self.config)
+
+    def test_mssql_board_rejects_an_nginx_site(self):
+        """Host PHP-FPM has no MSSQL driver, so such a board can't be served by nginx."""
+        self.document['board']['database'] = 'mssql'
+        self.document['board']['nginx_site'] = str(self.base / 'sites-available/board.conf')
+        self.save()
+        with self.assertRaisesRegex(ValueError, 'serve-board.py'):
+            runner.load_config(self.config)
+
+    def test_reset_passes_database_and_requires_docker_not_sqlite3(self):
+        (self.root / 'install.disabled').mkdir()
+        self.document['board']['database'] = 'postgres'
+        self.save()
+        with patch.object(runner.subprocess, 'run'):
+            actions = self.invoke('--reset', '--skip-seed', '--dry-run')
+        self.assertEqual(actions[0][0], 'bash')
+        missing = {'docker'}
+        with patch.object(runner.shutil, 'which', side_effect=lambda command: None if command in missing else '/usr/bin/' + command), \
+                patch.object(sys, 'argv', ['runner', '--config', str(self.config), '--reset', '--dry-run']), contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(ValueError, 'Required command not found: docker'):
+                runner.main()
+            missing = {'sqlite3'}
+            with patch.object(runner, 'run') as backend:
+                runner.main()
+            self.assertEqual(backend.call_args_list[0].kwargs['env']['DB_ENGINE'], 'postgres')
+
+    def test_php_runs_through_board_php(self):
+        """Seeds and phpBB's CLI use bin/board-php.py, so an MSSQL board gets its driver."""
+        actions = self.invoke('--mount', '--enable', '--only', 'first')
+        enable = next(action for action in actions if 'extension:enable' in action)
+        self.assertEqual(enable[:2], ['python3', str(runner.REPO / 'bin/board-php.py')])
+
+    def test_install_config_uses_the_database_container(self):
+        (self.root / '.seed-forum-database.json').write_text(json.dumps({
+            'engine': 'mysql', 'dbms': 'mysqli', 'dbhost': '127.0.0.1', 'dbport': 40001,
+            'dbuser': 'root', 'dbpasswd': 'secret', 'dbname': 'phpbb', 'container': 'c', 'image': 'mysql:8.4'}))
+        env = {**runner.os.environ, 'PHPBB_ROOT': str(self.root), 'SERVER_NAME': 'localhost', 'SERVER_PORT': '8092'}
+        result = runner.subprocess.run(['python3', str(runner.REPO / 'bin/build-install-config.py')], env=env,
+                                       capture_output=True, text=True, check=True)
+        database = yaml.safe_load(result.stdout)['installer']['database']
+        self.assertEqual((database['dbms'], database['dbport'], database['dbname']), ('mysqli', 40001, 'phpbb'))
+        (self.root / '.seed-forum-database.json').unlink()
+        result = runner.subprocess.run(['python3', str(runner.REPO / 'bin/build-install-config.py')], env=env,
+                                       capture_output=True, text=True, check=True)
+        database = yaml.safe_load(result.stdout)['installer']['database']
+        self.assertEqual((database['dbms'], database['dbhost']), ('sqlite3', str(self.root / 'store/sqlite.db')))
+
     def test_reset_passes_phpbb_branch_to_backend_and_nginx(self):
         (self.root / 'install.disabled').mkdir()
         self.document['board']['phpbb_branch'] = 'master'

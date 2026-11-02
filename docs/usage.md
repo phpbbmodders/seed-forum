@@ -2,7 +2,8 @@
 
 For requirements and initial setup, see the [README](../README.md).
 
-Manage a disposable local phpBB board, 3.3.x or 4.0 (master), using SQLite. Configure local
+Manage a disposable local phpBB board, 3.3.x or 4.0 (master), on SQLite or another
+database (see [Database](#database)). Configure local
 extensions and their seed scripts in YAML. Mount extensions, change their
 enabled state, seed fixtures, or purge cache independently of resetting.
 
@@ -145,6 +146,72 @@ example: a 4.0 board on port 8095 with the standard and wiki fixtures and
 the [phpbb-ext-wiki](https://github.com/phpbbmodders/phpbb-ext-wiki)
 checkout. Replace its paths before use.
 
+## Database
+
+`board.database` picks the database phpBB is installed into:
+
+- `sqlite` (the default): a SQLite file in the board's `store/`.
+- `mysql` (MySQL 8.4), `mariadb` (MariaDB LTS), `postgres` (PostgreSQL 16)
+  or `mssql` (SQL Server 2022 Developer): a Docker container for this board
+  alone.
+
+```yaml
+board:
+  root: /tmp/seed-forum-board-pg
+  database: postgres
+  server_port: '8096'
+  seeds:
+    - bin/seed-standard-fixtures.php
+```
+
+Every reset starts a fresh container and removes the board's old one, so
+nothing carries over. The container only listens on 127.0.0.1, on a free
+port, with a random password. `bin/db-container.py` starts and stops it and
+writes the connection details to `.seed-forum-database.json` in the board
+folder, readable only by you. `--status` shows the container and whether it
+is running. Switching a board back to `sqlite` removes its container on the
+next reset; to remove one yourself:
+
+```bash
+python3 bin/db-container.py stop /tmp/seed-forum-board-pg
+```
+
+MySQL, MariaDB and PostgreSQL boards use the host's PHP, which needs the
+`mysqli` or `pgsql` extension. PHP packages for Linux hosts don't include
+the MSSQL driver, so for an `mssql` board every PHP command (the installer,
+phpBB's CLI and the seeds) runs in an image built once from
+`docker/php-drivers/Dockerfile`, through `bin/board-php.py`. Starting an
+`mssql` container accepts Microsoft's SQL Server Developer licence, and
+building the image accepts Microsoft's ODBC driver licence. An MSSQL board's
+`config.php` has `dbhost` set to `127.0.0.1,PORT` and no `dbport`: phpBB's
+`mssqlnative` driver joins host and port with `:` outside Windows, which
+Microsoft's Linux driver can't read.
+
+nginx and the host's PHP-FPM can't serve an `mssql` board, so such a config
+may not set `board.nginx_site`. Serve it with PHP's built-in server instead,
+on the board's `server_port`, until you stop it:
+
+```bash
+python3 bin/serve-board.py /tmp/seed-forum-board-mssql 8097
+```
+
+That works for any board without an nginx site.
+
+`bin/board-sql.php` runs one SQL statement through phpBB's own database
+layer and prints the rows as JSON, so a test can read or change a board the
+same way on every database:
+
+```bash
+python3 bin/board-php.py BOARD_ROOT bin/board-sql.php BOARD_ROOT \
+  "SELECT config_value FROM phpbb_config WHERE config_name = ?" '["board_disable"]'
+```
+
+Reset installs phpBB with no extensions, then enables the configured ones
+through phpBB's CLI, the way an admin would; one that can't be enabled stops
+the reset with phpBB's message. phpBB 3.3's installer otherwise hides why an
+extension failed and stops before its last step. An extension the installer
+enables by itself, such as phpBB 3.3's `phpbb/viglink`, is purged again.
+
 ## Styles
 
 Add local styles by directory name. Their parent style must already be installed
@@ -283,8 +350,9 @@ These credentials are public. Keep the board local; do not expose it to the inte
 ## Requirements And Checks
 
 Requires Bash, Python 3.9+ with PyYAML (`python3-yaml`), and PHP compatible
-with the board (phpBB 4.0 needs PHP 8.2 or newer). Reset also uses `jq` and
-`sqlite3`; a `3.3` reset uses `curl`, `unzip` and `sha256sum`, and a
+with the board (phpBB 4.0 needs PHP 8.2 or newer). Reset also uses `jq`,
+plus `sqlite3` for a SQLite board or Docker for any other database (see
+[Database](#database)); a `3.3` reset uses `curl`, `unzip` and `sha256sum`, and a
 `master` reset uses `git` and `tar`. Mount/unmount and web-group permission repairs use `sudo`.
 The permission setup assumes the local web group is `www-data`; `cache/`
 and `store/` permissions are repaired after enable, disable, seed, and purge
@@ -297,8 +365,8 @@ are rejected. Mount, remount, enable, disable, seed, and cache commands
 require an installed board. Unmount requires an existing board directory.
 
 Reset removes `config.php`, the cache, and everything under `store/` except
-the `.htaccess` and `index.htm` that phpBB ships there. That includes the
-SQLite database and every extension's own folder (uploads, attachments,
+the `.htaccess` and `index.htm` that phpBB ships there. That includes a
+SQLite database (other databases get a new container) and every extension's own folder (uploads, attachments,
 wiki starter templates), so files from an earlier board never carry over;
 extensions and seeds create their folders again. Reset refuses to clean
 `store/` when it is a symlink, resolves outside the board, or has a mount
@@ -317,6 +385,11 @@ bin/reset-board.sh --validate
 - `bin/seed-forum.py`: config parsing, validation, selection, and operations.
 - `bin/rebuild-board.sh`: internal reset backend.
 - `bin/build-install-config.py`: builds installer YAML from the template.
+- `bin/db-container.py`: starts, stops and describes a board's database container.
+- `bin/board-php.py`: runs PHP for a board, on the host or in the MSSQL driver image.
+- `bin/board-sql.php`: runs one SQL statement through phpBB's database layer.
+- `bin/serve-board.py`: serves a board without nginx, with PHP's built-in server.
+- `docker/php-drivers/Dockerfile`: PHP with the MSSQL driver, for `mssql` boards.
 - `bin/nginx-site.py`: creates/enables or updates a board site with rollback.
 - `bin/run-seed.php`: seed ledger and execution lock.
 - `bin/seed-bootstrap.php`: shared phpBB bootstrap for standard fixtures and state checks.

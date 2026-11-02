@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Rebuilds a disposable local phpBB board (3.3.x or 4.0 master) using SQLite,
+# Rebuilds a disposable local phpBB board (3.3.x or 4.0 master) on SQLite or,
+# with DB_ENGINE set, a fresh database container (see bin/db-container.py),
 # with optional extensions enabled. Removes the board configuration, cache, and
 # store/ contents (database and extension data; phpBB's .htaccess and index.htm
 # stay). Positional arguments are extension checkout directories validated
@@ -19,6 +20,8 @@
 #   NGINX_SITE   nginx sites-available path; when enabled, create/update its
 #                root, host and port, enable it, validate and reload nginx
 #   PHP_FPM_SOCKET optional new-site socket override, otherwise auto-detected
+#   DB_ENGINE    sqlite (default), mysql, mariadb, postgres or mssql; any but
+#                sqlite starts a new database container and drops the old one
 
 set -Eeuo pipefail
 
@@ -28,8 +31,14 @@ if [ "${SEED_FORUM_CONFIGURED:-0}" != 1 ]; then
 fi
 
 : "${PHPBB_ROOT:?}" "${PHPBB_BRANCH:?}" "${SERVER_NAME:?}" "${SERVER_PORT:?}" "${NGINX_SITE:?}"
+DB_ENGINE="${DB_ENGINE:-sqlite}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# PHP for this board: the host's, or a container's for MSSQL (bin/board-php.py).
+board_php() {
+	python3 "$SCRIPT_DIR/board-php.py" "$PHPBB_ROOT" "$@"
+}
 
 MANAGED_EXTS_FILE="$PHPBB_ROOT/.seed-forum-mounted-extensions"
 # Remove tracked mounts and the legacy KB mount before replacing the mount set.
@@ -183,6 +192,14 @@ sudo bash "$SCRIPT_DIR/clean-store.sh" "$PHPBB_ROOT"
 sudo find "$PHPBB_ROOT/cache" -mindepth 1 ! -name '.htaccess' ! -name 'index.htm' -exec rm -rf {} +
 sudo chown -R "$(id -u):$(id -g)" "$PHPBB_ROOT/cache" "$PHPBB_ROOT/store"
 
+# A fresh database container replaces the old one; a SQLite board drops any
+# container left from an earlier configuration.
+if [ "$DB_ENGINE" = sqlite ]; then
+	python3 "$SCRIPT_DIR/db-container.py" stop "$PHPBB_ROOT"
+else
+	python3 "$SCRIPT_DIR/db-container.py" start "$PHPBB_ROOT" "$DB_ENGINE"
+fi
+
 echo "==> Mounting extensions"
 # A bind mount, not a symlink. phpBB resolves the extension's install
 # path with realpath() when it builds asset URLs (INCLUDECSS, etc.) -
@@ -213,20 +230,59 @@ for i in "${!EXT_SOURCES[@]}"; do
 done
 
 echo "==> Generating install config"
-INSTALL_YML="$(mktemp)"
+# Inside the board, not /tmp, so the installer can read it when PHP runs in a
+# container (MSSQL); it holds the database password, so only the owner may read it.
+INSTALL_YML="$PHPBB_ROOT/store/.seed-forum-install.yml"
 trap 'rm -f "$INSTALL_YML"' EXIT
-PHPBB_ROOT="$PHPBB_ROOT" SERVER_NAME="$SERVER_NAME" SERVER_PORT="$SERVER_PORT" \
-	python3 "$SCRIPT_DIR/build-install-config.py" "${EXT_NAMES[@]}" > "$INSTALL_YML"
+# No extensions here: they are enabled through phpBB's CLI after the install,
+# below. The 3.3 installer hides why an extension failed to enable, then stops
+# before its last step with exit 0, leaving store/install_config.php behind.
+# An empty list makes the installer enable every extension it finds (phpBB
+# 3.3 ships phpbb/viglink); those are purged again below.
+(umask 077 && PHPBB_ROOT="$PHPBB_ROOT" SERVER_NAME="$SERVER_NAME" SERVER_PORT="$SERVER_PORT" \
+	python3 "$SCRIPT_DIR/build-install-config.py" > "$INSTALL_YML")
 
 echo "==> Running the phpBB CLI installer"
-(cd "$PHPBB_ROOT" && php install/phpbbcli.php install "$INSTALL_YML" -n)
+# -v prints the installer's log lines; without it a failed extension enable
+# ("could not be enabled") is silent and the install stops part-way with exit 0.
+(cd "$PHPBB_ROOT" && board_php install/phpbbcli.php install "$INSTALL_YML" -n -v)
+rm -f "$INSTALL_YML"
+trap - EXIT
 
 # A fresh install always resets assets_version back to a low number
 # (currently 2), which a browser from an earlier session/board on this
 # same origin may already have cached CSS/JS under - it'd keep serving
 # that stale response since the cache key (URL + query string) matches.
 # A timestamp is guaranteed higher than anything previously cached.
-sqlite3 "$PHPBB_ROOT/store/sqlite.db" "UPDATE phpbb_config SET config_value = $(date +%s) WHERE config_name = 'assets_version';"
+(cd "$PHPBB_ROOT" && board_php bin/phpbbcli.php config:set assets_version "$(date +%s)" --no-interaction)
+
+if [ -f "$PHPBB_ROOT/store/install_config.php" ]; then
+	echo "The phpBB installer stopped before finishing (store/install_config.php is still there)." >&2
+	exit 1
+fi
+
+# Undo extensions the installer enabled on its own (such as phpBB 3.3's
+# phpbb/viglink), so the board runs only the configured ones.
+state="$(cd "$PHPBB_ROOT" && board_php "$SCRIPT_DIR/extension-state.php" "$PHPBB_ROOT")"
+while IFS= read -r ext_name; do
+	if [ -n "$ext_name" ]; then
+		echo "==> Removing $ext_name, which the installer enabled but the config doesn't list"
+		(cd "$PHPBB_ROOT" && board_php bin/phpbbcli.php extension:disable "$ext_name" --no-interaction)
+		(cd "$PHPBB_ROOT" && board_php bin/phpbbcli.php extension:purge "$ext_name" --no-interaction)
+	fi
+done < <(jq -r '.enabled[]' <<< "$state")
+
+# Enable extensions the way an admin would, in config order; phpBB's own error
+# stops the reset if one can't be enabled.
+for ext_name in "${EXT_NAMES[@]}"; do
+	echo "==> Enabling $ext_name"
+	(cd "$PHPBB_ROOT" && board_php bin/phpbbcli.php extension:enable "$ext_name" --no-interaction)
+	state="$(cd "$PHPBB_ROOT" && board_php "$SCRIPT_DIR/extension-state.php" "$PHPBB_ROOT")"
+	if ! jq -e --arg name "$ext_name" '.enabled | index($name)' <<< "$state" > /dev/null; then
+		echo "phpBB did not enable $ext_name; see the message above." >&2
+		exit 1
+	fi
+done
 
 echo "==> Fixing permissions for the web server group (www-data)"
 for d in cache store files config images/avatars/upload; do
