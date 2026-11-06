@@ -261,16 +261,18 @@ if [ -f "$PHPBB_ROOT/store/install_config.php" ]; then
 	exit 1
 fi
 
-# Undo extensions the installer enabled on its own (such as phpBB 3.3's
-# phpbb/viglink), so the board runs only the configured ones.
+# Reset extensions the installer enabled, then enable only the configured ones.
 state="$(cd "$PHPBB_ROOT" && board_php "$SCRIPT_DIR/extension-state.php" "$PHPBB_ROOT")"
-while IFS= read -r ext_name; do
+# Read the list before calling PHP. The SQL Server wrapper uses docker run -i
+# and can consume the remaining names if the loop feeds them through stdin.
+mapfile -t installer_enabled < <(jq -r '.enabled[]' <<< "$state")
+for ext_name in "${installer_enabled[@]}"; do
 	if [ -n "$ext_name" ]; then
-		echo "==> Removing $ext_name, which the installer enabled but the config doesn't list"
+		echo "==> Removing installer-enabled extension $ext_name"
 		(cd "$PHPBB_ROOT" && board_php bin/phpbbcli.php extension:disable "$ext_name" --no-interaction)
 		(cd "$PHPBB_ROOT" && board_php bin/phpbbcli.php extension:purge "$ext_name" --no-interaction)
 	fi
-done < <(jq -r '.enabled[]' <<< "$state")
+done
 
 # Enable extensions the way an admin would, in config order; phpBB's own error
 # stops the reset if one can't be enabled.
