@@ -11,6 +11,12 @@ the database on 127.0.0.1 and `-S 127.0.0.1:PORT` serves the board there.
 The board and seed-forum directories are mounted at their own paths, with the
 board's extension bind mounts inside, and PHP runs as the calling user.
 
+When a directory named after the board with `.outside` added exists next to it
+(BOARD_ROOT.outside), it is mounted read-write at its own path too. Tests use it
+for files that must live outside the board, such as an extension's private
+backup directory; on the host the same path is used directly. Create and remove
+it yourself; nothing here does.
+
 Exit status: PHP's own, or 1 when the image can't be built.
 """
 import hashlib
@@ -59,8 +65,11 @@ def main() -> int:
     # stopping a `-S` server would leave the container serving.
     argv = ["docker", "run", "--rm", "-i", "--init", "--network", "host",
             "--user", f"{os.getuid()}:{os.getgid()}", "-e", "HOME=/tmp",
-            "-v", f"{root}:{root}", "-v", f"{REPO}:{REPO}:ro", "-w", str(workdir),
-            image, "php", *php_args]
+            "-v", f"{root}:{root}", "-v", f"{REPO}:{REPO}:ro"]
+    outside = root.with_name(root.name + ".outside")
+    if outside.is_dir() and not outside.is_symlink():
+        argv += ["-v", f"{outside}:{outside}"]
+    argv += ["-w", str(workdir), image, "php", *php_args]
     os.execvp("docker", argv)
 
 

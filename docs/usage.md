@@ -197,6 +197,12 @@ python3 bin/serve-board.py /tmp/seed-forum-board-mssql 8097
 
 That works for any board without an nginx site.
 
+The MSSQL image sees only the board and the seed-forum checkout (read-only).
+A test that needs a writable directory outside the board, such as an
+extension's private backup directory, can create `BOARD_ROOT.outside` next to
+the board; `bin/board-php.py` mounts it read-write at the same path when it
+exists. Host PHP uses that path directly. Remove it when the test is done.
+
 `bin/board-sql.php` runs one SQL statement through phpBB's own database
 layer and prints the rows as JSON, so a test can read or change a board the
 same way on every database:
