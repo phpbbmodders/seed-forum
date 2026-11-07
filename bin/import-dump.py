@@ -194,6 +194,11 @@ def write_config(root, settings, database, password):
         shutil.chown(target, group='www-data')
     except LookupError:
         pass  # No www-data group on this machine, so there is no web server to grant.
+    except PermissionError:
+        # Not a member of www-data: phpBB's CLI (run as this user) can still
+        # read it, but a web server running as www-data cannot.
+        print(f'Warning: could not give the www-data group access to {target}; '
+              'add yourself to www-data for a web server to read it', file=sys.stderr)
 
 
 def main():
