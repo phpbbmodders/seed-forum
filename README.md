@@ -17,6 +17,7 @@ local, not internet-facing.
 - Install on SQLite, or on MySQL, MariaDB, PostgreSQL or MSSQL in a fresh Docker container that only listens on 127.0.0.1 (`board.database`).
 - Bind-mount local extensions and enable or disable them through phpBB's CLI.
 - Seed standard forum fixtures and optional Knowledgebase fixtures.
+- Build a board from a real board's MySQL/MariaDB dump instead, in a disposable local container, with mail and the real board's extensions switched off.
 - Copy and install local styles, with an optional default style.
 - Create or update an optional nginx site, with validation and rollback.
 - Run mount, unmount, seed, style and cache operations without resetting the database.
@@ -26,9 +27,9 @@ local, not internet-facing.
 
 - Linux with Bash, bind-mount support and `mountpoint` (util-linux).
 - Python 3.9 or newer with PyYAML.
-- PHP CLI compatible with the board, including SQLite support (PHP 8.2 or newer for phpBB 4.0), and the `mysqli` or `pgsql` extension for MySQL, MariaDB or PostgreSQL boards.
+- PHP CLI compatible with the board, including SQLite support (PHP 8.2 or newer for phpBB 4.0), and the `mysqli` or `pgsql` extension for MySQL, MariaDB or PostgreSQL boards (`mysqli` also for boards built from a dump).
 - `jq` for reset operations, `sqlite3` for SQLite boards, plus `curl`, `unzip` and `sha256sum` for 3.3 boards or `git` and `tar` for 4.0 boards.
-- Docker for boards on any database but SQLite. MSSQL boards also run PHP in a container built from `docker/php-drivers/`, because PHP packages for Linux hosts don't include the MSSQL driver; starting one accepts Microsoft's SQL Server Developer licence.
+- Docker for boards on any database but SQLite, and for boards built from a dump (`board.import`). MSSQL boards also run PHP in a container built from `docker/php-drivers/`, because PHP packages for Linux hosts don't include the MSSQL driver; starting one accepts Microsoft's SQL Server Developer licence.
 - `sudo` access for mounts and permission repairs; the web group is `www-data`.
 - nginx and PHP-FPM only when using automatic nginx site setup.
 
