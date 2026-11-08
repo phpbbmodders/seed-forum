@@ -148,7 +148,7 @@ function seenotes_reason(string $title, string $description, string $color): int
 
 // The starter reasons, by their English names
 $queue = seenotes_reason('Moderation queue', 'Posts must be approved before they appear', 'AA0000');
-$spam = seenotes_reason('Spam watch', 'Check links and signatures in new posts', 'C05800');
+$spam = seenotes_reason('Spam watch', 'Check links and signatures in new posts', 'A04800');
 seenotes_reason('Conduct', 'Earlier problems with how they treat other members', '8C5A00');
 $general = seenotes_reason('General', '', '555555');
 // A reason without a description, to show the line without a hover text
