@@ -113,3 +113,12 @@ output*.txt
 .idea_modules/
 atlassian-ide-plugin.xml
 /nbproject/
+
+# =========================
+# Local board configurations
+# =========================
+
+# Live runner config, seeded from config/local.yml.example
+/config/local.yml
+# Points at a private dump with real members' data
+/config/exporthtml-realdump.yml
