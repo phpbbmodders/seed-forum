@@ -3,8 +3,9 @@
  * Seed an installed board with the phpBB Modders See Notes extension enabled.
  *
  * Input: phpBB board root as the first argument. Give the standard fixture
- * members reasons and notes in every state See Notes can show: five reasons
- * (one switched off, one without a description, each with its own color); a
+ * members reasons and notes in every state See Notes can show: the seven
+ * starter reasons the extension adds when it is enabled, plus a switched-off
+ * one, with "General" emptied of its description; a
  * member with a current reason, an older second reason, a note quoting a
  * private message and an edited note; a member whose note was written by a
  * staff member who has since been deleted (the saved name shows as plain
@@ -13,8 +14,8 @@
  * Also give members phpBB warnings and user notes, so the read-only "phpBB user
  * notes" box on the notes pages has content, and a post by each member so the
  * reason line shows next to posts. Print what was created.
- * Reject a board that already has a See Notes reason. Use the runner for
- * seed-ledger protection.
+ * Reject a board where members already have See Notes entries. Use the runner
+ * for seed-ledger protection.
  *
  * Needs the standard fixtures (bin/seed-standard-fixtures.php) to have run
  * first, for the forum_* members and their posts. Works on phpBB 3.3.x and 4.0.
@@ -35,12 +36,12 @@ $reasons_table = $table_prefix . 'seenotes_reasons';
 $entries_table = $table_prefix . 'seenotes_entries';
 $notes_table = $table_prefix . 'seenotes_notes';
 
-$result = $db->sql_query('SELECT reason_id FROM ' . $reasons_table);
+$result = $db->sql_query_limit('SELECT entry_id FROM ' . $entries_table, 1);
 $existing = $db->sql_fetchrow($result);
 $db->sql_freeresult($result);
 if ($existing)
 {
-	fwrite(STDERR, "See Notes fixtures already exist (a reason was found); reset before seeding again.\n");
+	fwrite(STDERR, "See Notes fixtures already exist (an entry was found); reset before seeding again.\n");
 	exit(1);
 }
 
@@ -122,12 +123,38 @@ function seenotes_entry(int $user_id, int $reason_id, bool $current, int $time):
 	return $entry_id;
 }
 
-// Reasons, in list order
-$queue = $manager->save_reason(['reason_title' => 'Moderation queue', 'reason_description' => 'Posts must be approved before they appear', 'reason_color' => 'AA0000']);
-$spam = $manager->save_reason(['reason_title' => 'Spam watch', 'reason_description' => 'Check every link in new posts', 'reason_color' => '0055AA']);
-$conduct = $manager->save_reason(['reason_title' => 'Conduct', 'reason_description' => 'Has been warned about personal attacks', 'reason_color' => 'B35900']);
-$general = $manager->save_reason(['reason_title' => 'General', 'reason_description' => '', 'reason_color' => '555555']);
-$retired = $manager->save_reason(['reason_title' => 'Signature links', 'reason_description' => 'Old rule, replaced by Spam watch', 'reason_color' => '6B2C91']);
+/**
+ * The id of a reason by name, adding it at the end of the list when the board
+ * does not have it (the starter reasons are added when the extension is
+ * enabled, in the board's default language).
+ *
+ * @param string $title Reason name.
+ * @param string $description Description, used when the reason is added.
+ * @param string $color Six-digit hex color, used when the reason is added.
+ * @return int Reason id.
+ */
+function seenotes_reason(string $title, string $description, string $color): int
+{
+	global $manager;
+	foreach ($manager->get_reasons() as $reason_id => $reason)
+	{
+		if ($reason['reason_title'] === $title)
+		{
+			return (int) $reason_id;
+		}
+	}
+	return $manager->save_reason(['reason_title' => $title, 'reason_description' => $description, 'reason_color' => $color]);
+}
+
+// The starter reasons, by their English names
+$queue = seenotes_reason('Moderation queue', 'Posts must be approved before they appear', 'AA0000');
+$spam = seenotes_reason('Spam watch', 'Check links and signatures in new posts', 'C05800');
+seenotes_reason('Conduct', 'Earlier problems with how they treat other members', '8C5A00');
+$general = seenotes_reason('General', '', '555555');
+// A reason without a description, to show the line without a hover text
+$manager->save_reason(['reason_title' => 'General', 'reason_description' => '', 'reason_color' => '555555'], $general);
+// A switched-off reason that a member still has
+$retired = seenotes_reason('Signature links', 'Old rule, replaced by Spam watch', '2F6F3E');
 $manager->set_reason_active($retired, false);
 
 $alex = seenotes_member('forum_alex');
@@ -163,7 +190,7 @@ add_warning($blair, 'Spamming affiliate links.', false, seenotes_post_of((int) $
 $phpbb_log->add('user', $user->data['user_id'], $user->ip, 'LOG_USER_GENERAL', false, ['reportee_id' => (int) $alex['user_id'], 'Asked by email why posts need approval; pointed to the PM.']);
 $phpbb_log->add('user', $user->data['user_id'], $user->ip, 'LOG_USER_GENERAL', false, ['reportee_id' => (int) $drew['user_id'], 'Helpful in the support forum, no issues.']);
 
-echo "See Notes fixtures: 5 reasons (1 switched off), forum_alex (current reason, quoted PM, edited note, older entry, warning), "
+echo "See Notes fixtures: the starter reasons plus 1 switched off, forum_alex (current reason, quoted PM, edited note, older entry, warning), "
 	. "forum_blair (current reason, note by a deleted moderator, warning), forum_casey (switched-off reason only: NONE), "
 	. "forum_drew (no reasons: NONE).\n";
 echo "Log in as admin / " . 'KbTest1234!' . " to see them; members never see See Notes.\n";

@@ -397,9 +397,9 @@ in every state (version histories, pending and stale edits, a never-approved art
 articles, forty bulk articles, uploaded files embedded with `[[File:name]]`, and a real discussion topic).
 See [Wiki fixtures](wiki-fixtures.md).
 
-`bin/seed-seenotes-fixtures.php` seeds phpBB Modders See Notes, after the standard fixtures: five reasons
-(one switched off, one without a description), and the `forum_*` members in every state the extension
-shows. `forum_alex` has a current reason with a quoted PM, an edited note and an older entry;
+`bin/seed-seenotes-fixtures.php` seeds phpBB Modders See Notes, after the standard fixtures: it adds a
+switched-off reason to the extension's starter reasons, clears General's description, and puts the
+`forum_*` members in every state the extension shows. `forum_alex` has a current reason with a quoted PM, an edited note and an older entry;
 `forum_blair` has a note by a moderator who has since been deleted; `forum_casey` has only a switched-off
 reason, so NONE shows over existing history; `forum_drew` has none at all. `forum_alex` and `forum_blair`
 also get phpBB warnings, and user notes are added, for the extension's read-only user notes box.
