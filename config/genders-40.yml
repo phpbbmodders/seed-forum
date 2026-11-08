@@ -1,0 +1,33 @@
+# Disposable phpBB 4.0 (master) board for genders: gender-specific language strings
+variables:
+  PHPBB_ROOT: /home/william/Desktop/repos/seeded-board/genders-40
+
+  GENDERS_EXT_SRC: /home/william/Desktop/repos/genders
+
+  SERVER_NAME: localhost
+
+  # Remove this variable and board.nginx_site to leave nginx unchanged.
+  NGINX_SITE: /etc/nginx/sites-available/phpbb-genders-40.conf
+
+  SERVER_PORT: '8134'
+
+board:
+  root: ${PHPBB_ROOT}
+
+  phpbb_branch: 'master'
+
+  server_name: ${SERVER_NAME}
+
+  server_port: ${SERVER_PORT}
+
+  nginx_site: ${NGINX_SITE}
+
+  seeds:
+    - bin/seed-standard-fixtures.php
+
+styles: {}
+
+extensions:
+  genders:
+    source: ${GENDERS_EXT_SRC}
+

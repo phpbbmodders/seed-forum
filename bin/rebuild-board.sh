@@ -204,8 +204,8 @@ else
 	python3 "$SCRIPT_DIR/db-container.py" start "$PHPBB_ROOT" "$DB_ENGINE"
 fi
 
-echo "==> Mounting extensions"
-# A bind mount, not a symlink. phpBB resolves the extension's install
+# Bind-mount the configured extension checkouts into ext/. A bind mount, not a
+# symlink. phpBB resolves the extension's install
 # path with realpath() when it builds asset URLs (INCLUDECSS, etc.) -
 # realpath() follows a symlink straight through to the source checkout, which
 # sits outside PHPBB_ROOT, so the "relative" URL it computes ends up
@@ -213,27 +213,31 @@ echo "==> Mounting extensions"
 # extension styles goes unstyled). A bind mount is the same directory
 # reachable at two paths, not a symlink, so realpath() resolves it as
 # living under PHPBB_ROOT like any other extension.
+mount_extensions() {
+	echo "==> Mounting extensions"
+	: > "$MANAGED_EXTS_FILE"
+	for i in "${!EXT_SOURCES[@]}"; do
+		ext_src="${EXT_SOURCES[$i]}"
+		ext_name="${EXT_NAMES[$i]}"
+		ext_target="$PHPBB_ROOT/ext/$ext_name"
+		mkdir -p "$(dirname "$ext_target")"
+		if [ -L "$ext_target" ]; then
+			rm -f "$ext_target"
+		fi
+		if mountpoint -q "$ext_target" 2>/dev/null; then
+			sudo umount "$ext_target"
+		fi
+		mkdir -p "$ext_target"
+		echo "    $ext_name <= $ext_src"
+		sudo mount --bind "$ext_src" "$ext_target"
+		printf '%s\n' "$ext_target" >> "$MANAGED_EXTS_FILE"
+	done
+}
+
 unmount_extensions
 
-: > "$MANAGED_EXTS_FILE"
-for i in "${!EXT_SOURCES[@]}"; do
-	ext_src="${EXT_SOURCES[$i]}"
-	ext_name="${EXT_NAMES[$i]}"
-	ext_target="$PHPBB_ROOT/ext/$ext_name"
-	mkdir -p "$(dirname "$ext_target")"
-	if [ -L "$ext_target" ]; then
-		rm -f "$ext_target"
-	fi
-	if mountpoint -q "$ext_target" 2>/dev/null; then
-		sudo umount "$ext_target"
-	fi
-	mkdir -p "$ext_target"
-	echo "    $ext_name <= $ext_src"
-	sudo mount --bind "$ext_src" "$ext_target"
-	printf '%s\n' "$ext_target" >> "$MANAGED_EXTS_FILE"
-done
-
 if [ -n "${SEED_FORUM_IMPORT:-}" ]; then
+	mount_extensions
 	# An imported board is already installed, so install/ is set aside first:
 	# nobody should be able to run the installer over the imported data.
 	echo "==> Disabling install/ before importing"
@@ -245,11 +249,14 @@ else
 	# container (MSSQL); it holds the database password, so only the owner may read it.
 	INSTALL_YML="$PHPBB_ROOT/store/.seed-forum-install.yml"
 	trap 'rm -f "$INSTALL_YML"' EXIT
-	# No extensions here: they are enabled through phpBB's CLI after the install,
-	# below. The 3.3 installer hides why an extension failed to enable, then stops
-	# before its last step with exit 0, leaving store/install_config.php behind.
-	# An empty list makes the installer enable every extension it finds (phpBB
-	# 3.3 ships phpbb/viglink); those are purged again below.
+	# No extensions here: they are mounted and enabled through phpBB's CLI after
+	# the install, below. The 3.3 installer hides why an extension failed to
+	# enable, then stops before its last step with exit 0, leaving
+	# store/install_config.php behind. An empty list makes the installer enable
+	# every extension it finds in ext/ (phpBB 3.3 ships phpbb/viglink); those are
+	# purged again below. The configured checkouts are not mounted yet, so the
+	# installer never sees them: its container has no config['version'], and an
+	# is_enableable() that compares it would stop the install.
 	(umask 077 && PHPBB_ROOT="$PHPBB_ROOT" SERVER_NAME="$SERVER_NAME" SERVER_PORT="$SERVER_PORT" \
 		python3 "$SCRIPT_DIR/build-install-config.py" > "$INSTALL_YML")
 
@@ -284,6 +291,8 @@ else
 			(cd "$PHPBB_ROOT" && board_php bin/phpbbcli.php extension:purge "$ext_name" --no-interaction)
 		fi
 	done
+
+	mount_extensions
 fi
 
 # Enable extensions the way an admin would, in config order; phpBB's own error
