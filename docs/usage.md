@@ -401,7 +401,7 @@ See [Wiki fixtures](wiki-fixtures.md).
 switched-off reason to the extension's starter reasons, clears General's description, and puts the
 `forum_*` members in every state the extension shows. `forum_alex` has a current reason with a quoted PM, an edited note and an older entry;
 `forum_blair` has a note by a moderator who has since been deleted; `forum_casey` has only a switched-off
-reason, so NONE shows over existing history; `forum_drew` has none at all. `forum_alex` and `forum_blair`
+reason and none current, so no reason line shows but the notes keep its history; `forum_drew` has none at all. `forum_alex` and `forum_blair`
 also get phpBB warnings, and user notes are added, for the extension's read-only user notes box.
 
 All fixture users use `KbTest1234!`. Installer admin credentials are
