@@ -1,0 +1,36 @@
+# Disposable phpBB 4.0 (master) board for activity24hours: its 4.0 baseline,
+# the guest online list report, and running alongside hidebots (an optional
+# service it accepts). hidebots is toggled with phpBB's CLI during tests.
+variables:
+  PHPBB_ROOT: /home/william/Desktop/repos/seeded-board/activity24hours-40
+
+  ACTIVITY24HOURS_EXT_SRC: /home/william/Desktop/repos/activity24hours
+
+  HIDEBOTS_EXT_SRC: /home/william/Desktop/repos/hidebots
+
+  SERVER_NAME: localhost
+
+  SERVER_PORT: '8124'
+
+board:
+  root: ${PHPBB_ROOT}
+
+  phpbb_branch: 'master'
+
+  server_name: ${SERVER_NAME}
+
+  server_port: ${SERVER_PORT}
+
+  seeds:
+    - bin/seed-standard-fixtures.php
+
+styles: {}
+
+extensions:
+  activity24hours:
+    source: ${ACTIVITY24HOURS_EXT_SRC}
+    seeds: []
+
+  hidebots:
+    source: ${HIDEBOTS_EXT_SRC}
+    seeds: []

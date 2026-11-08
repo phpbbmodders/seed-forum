@@ -1,0 +1,37 @@
+# Disposable phpBB 3.3 board for seenotes: its first build, run by the
+# varma pass (MCP and ACP notes pages, the reason line, permissions).
+variables:
+  PHPBB_ROOT: /home/william/Desktop/repos/seeded-board/seenotes-33
+
+  SEENOTES_EXT_SRC: /home/william/Desktop/repos/seenotes
+
+  SERVER_NAME: localhost
+
+  # Remove this variable and board.nginx_site to leave nginx unchanged.
+  NGINX_SITE: /etc/nginx/sites-available/phpbb-seenotes-33.conf
+
+  SERVER_PORT: '8131'
+
+board:
+  root: ${PHPBB_ROOT}
+
+  phpbb_branch: '3.3'
+
+  server_name: ${SERVER_NAME}
+
+  server_port: ${SERVER_PORT}
+
+  nginx_site: ${NGINX_SITE}
+
+  seeds:
+    - bin/seed-standard-fixtures.php
+
+styles: {}
+
+extensions:
+  seenotes:
+    source: ${SEENOTES_EXT_SRC}
+
+    # Needs the board seeds above first (the forum_* members and their posts).
+    seeds:
+      - bin/seed-seenotes-fixtures.php
