@@ -8,8 +8,9 @@ extensions and their seed scripts in YAML. Mount extensions, change their
 enabled state, seed fixtures, or purge cache independently of resetting.
 
 The reset fills an empty board folder with the phpBB branch the config names in `board.phpbb_branch`
-(see [phpBB Branch](#phpbb-branch)). The three seed scripts,
-`bin/seed-standard-fixtures.php`, `bin/seed-kb-fixtures.php` and `bin/seed-wiki-fixtures.php`, can also be
+(see [phpBB Branch](#phpbb-branch)). The seed scripts,
+`bin/seed-standard-fixtures.php`, `bin/seed-kb-fixtures.php`, `bin/seed-wiki-fixtures.php` and
+`bin/seed-seenotes-fixtures.php`, can also be
 run on their own with `bin/run-seed.php` against any installed board.
 
 ## Quick Start
@@ -396,6 +397,13 @@ in every state (version histories, pending and stale edits, a never-approved art
 articles, forty bulk articles, uploaded files embedded with `[[File:name]]`, and a real discussion topic).
 See [Wiki fixtures](wiki-fixtures.md).
 
+`bin/seed-seenotes-fixtures.php` seeds phpBB Modders See Notes, after the standard fixtures: it adds a
+switched-off reason to the extension's starter reasons, clears General's description, and puts the
+`forum_*` members in every state the extension shows. `forum_alex` has a current reason with a quoted PM, an edited note and an older entry;
+`forum_blair` has a note by a moderator who has since been deleted; `forum_casey` has only a switched-off
+reason, so NONE shows over existing history; `forum_drew` has none at all. `forum_alex` and `forum_blair`
+also get phpBB warnings, and user notes are added, for the extension's read-only user notes box.
+
 All fixture users use `KbTest1234!`. Installer admin credentials are
 `admin` / `KbTest1234!`, intended for disposable local boards.
 These credentials are public. Keep the board local; do not expose it to the internet.
@@ -450,6 +458,7 @@ bin/reset-board.sh --validate
 - `bin/seed-standard-fixtures.php`: core forum fixtures, independent of KB.
 - `bin/seed-kb-fixtures.php`: Knowledgebase-specific fixtures.
 - `bin/seed-wiki-fixtures.php`: Wiki-specific fixtures.
+- `bin/seed-seenotes-fixtures.php`: See Notes-specific fixtures.
 - `bin/extension-state.php`: reads enabled/disabled extension state.
 - `config/local.yml.example`: example runner configuration; edit its local paths.
 - `config/bare.yml`: original development-board profile; edit paths and style choices before use.
