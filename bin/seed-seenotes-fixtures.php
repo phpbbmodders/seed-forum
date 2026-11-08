@@ -9,8 +9,9 @@
  * member with a current reason, an older second reason, a note quoting a
  * private message and an edited note; a member whose note was written by a
  * staff member who has since been deleted (the saved name shows as plain
- * text); a member who only has a switched-off reason and no current one (NONE
- * over existing history); and a member with nothing at all (plain NONE).
+ * text); a member who only has a switched-off reason and no current one (no
+ * reason line, but history behind the notes button); and a member with nothing
+ * at all.
  * Also give members phpBB warnings and user notes, so the read-only "phpBB user
  * notes" box on the notes pages has content, and a post by each member so the
  * reason line shows next to posts. Print what was created.
@@ -178,11 +179,11 @@ $note = seenotes_note($entry, 'Posted the same affiliate link in two forums. Wat
 $db->sql_query('UPDATE ' . $notes_table . " SET note_author_id = 999999, note_author_name = 'former_moderator' WHERE note_id = " . $note);
 seenotes_note($entry, 'Quiet for a week now.', $now - 2 * $day);
 
-// forum_casey: only a switched-off reason, none current, so NONE shows over existing history
+// forum_casey: only a switched-off reason, none current: no reason line, but history behind the notes button
 $entry = seenotes_entry((int) $casey['user_id'], $retired, false, $now - 90 * $day);
 seenotes_note($entry, 'Removed a signature with six shop links.', $now - 90 * $day);
 
-// forum_drew: no reasons at all (plain NONE)
+// forum_drew: no reasons at all
 
 // phpBB warnings and user notes for the read-only box
 add_warning($alex, 'Advertising: links to the same shop in several posts.', false, seenotes_post_of((int) $alex['user_id']));
@@ -191,6 +192,6 @@ $phpbb_log->add('user', $user->data['user_id'], $user->ip, 'LOG_USER_GENERAL', f
 $phpbb_log->add('user', $user->data['user_id'], $user->ip, 'LOG_USER_GENERAL', false, ['reportee_id' => (int) $drew['user_id'], 'Helpful in the support forum, no issues.']);
 
 echo "See Notes fixtures: the starter reasons plus 1 switched off, forum_alex (current reason, quoted PM, edited note, older entry, warning), "
-	. "forum_blair (current reason, note by a deleted moderator, warning), forum_casey (switched-off reason only: NONE), "
-	. "forum_drew (no reasons: NONE).\n";
+	. "forum_blair (current reason, note by a deleted moderator, warning), forum_casey (switched-off reason only, none current), "
+	. "forum_drew (no reasons).\n";
 echo "Log in as admin / " . 'KbTest1234!' . " to see them; members never see See Notes.\n";
