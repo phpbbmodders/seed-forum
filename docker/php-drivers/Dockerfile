@@ -13,7 +13,7 @@ FROM php:8.4-cli
 ARG MICROSOFT_SIGNER_FPR=AA86F75E427A19DD33346403EE4D7792F748182B
 RUN set -eux; \
 	apt-get update; \
-	apt-get install -y --no-install-recommends ca-certificates curl gnupg libpq-dev unixodbc-dev; \
+	apt-get install -y --no-install-recommends ca-certificates curl gnupg libpq-dev libzip-dev unixodbc-dev; \
 	curl -fsSL https://packages.microsoft.com/keys/microsoft-2025.asc -o /tmp/microsoft.asc; \
 	gpg --show-keys --with-colons /tmp/microsoft.asc | grep -qx "fpr:::::::::${MICROSOFT_SIGNER_FPR}:"; \
 	gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg /tmp/microsoft.asc; \
@@ -23,7 +23,8 @@ RUN set -eux; \
 	ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql17=17.11.1.1-1; \
 	pecl install sqlsrv-5.13.3 pdo_sqlsrv-5.13.3; \
 	docker-php-ext-enable sqlsrv pdo_sqlsrv; \
-	docker-php-ext-install mysqli pgsql; \
+	# zip: extensions that read ZIP files (ZipArchive), like the host's PHP has
+	docker-php-ext-install mysqli pgsql zip; \
 	rm -rf /var/lib/apt/lists/* /tmp/pear
 
 # Test boards: no opcache, so edited extension files take effect at once.
