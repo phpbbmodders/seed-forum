@@ -9,8 +9,8 @@ enabled state, seed fixtures, or purge cache independently of resetting.
 
 The reset fills an empty board folder with the phpBB branch the config names in `board.phpbb_branch`
 (see [phpBB Branch](#phpbb-branch)). The seed scripts,
-`bin/seed-standard-fixtures.php`, `bin/seed-kb-fixtures.php`, `bin/seed-wiki-fixtures.php` and
-`bin/seed-seenotes-fixtures.php`, can also be
+`bin/seed-standard-fixtures.php`, `bin/seed-kb-fixtures.php`, `bin/seed-wiki-fixtures.php`,
+`bin/seed-seenotes-fixtures.php` and `bin/seed-translationhelper-fixtures.php`, can also be
 run on their own with `bin/run-seed.php` against any installed board.
 
 ## Quick Start
@@ -404,6 +404,18 @@ switched-off reason to the extension's starter reasons, clears General's descrip
 reason and none current, so no reason line shows but the notes keep its history; `forum_drew` has none at all. `forum_alex` and `forum_blair`
 also get phpBB warnings, and user notes are added, for the extension's read-only user notes box.
 
+`bin/seed-translationhelper-fixtures.php` sets a board up for phpBB Modders Translation Helper: it
+adds a test Swedish language (`sv`, a copy of the board's English files with its own `iso.txt`) and a
+small fixture extension, `seedforum/translatable` 1.0.0, made of plain files rather than a bind mount,
+so Translation Helper can write its language folder without touching a source checkout. Its English
+files cover quotes, HTML, a placeholder, a plural and a second file; `language/sv/common.php`
+translates part of them. `bin/translationhelper-upgrade-fixture.php BOARD_ROOT` then replaces the
+fixture with 1.1.0 the way many administrators upgrade (delete the folder, upload the new one): one
+English string changes, one is removed, one is added, and no Swedish files come with it. Add
+`--readonly-language` to leave the new `language/` folder unwritable for the web server, to see the
+"could not be put back" warning. `config/translationhelper-33.yml` and `config/translationhelper-40.yml`
+build these boards on phpBB 3.3 and 4.0.
+
 All fixture users use `KbTest1234!`. Installer admin credentials are
 `admin` / `KbTest1234!`, intended for disposable local boards.
 These credentials are public. Keep the board local; do not expose it to the internet.
@@ -459,6 +471,8 @@ bin/reset-board.sh --validate
 - `bin/seed-kb-fixtures.php`: Knowledgebase-specific fixtures.
 - `bin/seed-wiki-fixtures.php`: Wiki-specific fixtures.
 - `bin/seed-seenotes-fixtures.php`: See Notes-specific fixtures.
+- `bin/seed-translationhelper-fixtures.php`: Translation Helper test language and fixture extension.
+- `bin/translationhelper-upgrade-fixture.php`: upgrades that fixture extension to 1.1.0 by replacing its folder.
 - `bin/extension-state.php`: reads enabled/disabled extension state.
 - `config/local.yml.example`: example runner configuration; edit its local paths.
 - `config/bare.yml`: original development-board profile; edit paths and style choices before use.
