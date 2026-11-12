@@ -561,11 +561,18 @@ def main():
     if args.enable and not args.reset:
         # phpBB fails on an extension that is already enabled, so those are skipped.
         enabled = None if args.dry_run else set(extension_state(root)["enabled"])
+        newly_enabled = False
         for _, extension in extensions:
             if enabled is not None and extension["name"] in enabled:
                 print(f"Already enabled: {extension['name']}", flush=True)
                 continue
             cli(root, ["extension:enable", extension["name"]], dry=args.dry_run)
+            newly_enabled = True
+        if newly_enabled and not args.purge_cache:
+            # phpBB's CLI enable keeps the cached container built without the
+            # extension, so seeds and pages would not find its services.
+            web_group_writable(root, ("cache",), args.dry_run)
+            cli(root, ["cache:purge"], dry=args.dry_run)
     if args.seed_only or (args.reset and not args.skip_seed):
         for script in seeds:
             run([*board_php(root), REPO / "bin/run-seed.php", root, script], dry=args.dry_run)

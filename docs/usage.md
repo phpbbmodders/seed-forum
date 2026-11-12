@@ -187,7 +187,8 @@ phpBB's CLI and the seeds) runs in an image built once from
 building the image accepts Microsoft's ODBC driver licence. An MSSQL board's
 `config.php` has `dbhost` set to `127.0.0.1,PORT` and no `dbport`: phpBB's
 `mssqlnative` driver joins host and port with `:` outside Windows, which
-Microsoft's Linux driver can't read.
+Microsoft's Linux driver can't read. Like the host's PHP, the image also has
+`zip` and GD (PNG and JPEG), for seeds that read ZIP files or make images.
 
 nginx and the host's PHP-FPM can't serve an `mssql` board, so such a config
 may not set `board.nginx_site`. Serve it with PHP's built-in server instead,
@@ -197,7 +198,15 @@ on the board's `server_port`, until you stop it:
 python3 bin/serve-board.py /tmp/seed-forum-board-mssql 8097
 ```
 
-That works for any board without an nginx site.
+That works for any board without an nginx site. It runs four PHP workers
+(set `PHP_CLI_SERVER_WORKERS` to change that): with one, a connection a
+browser opens ahead of time and never uses holds the server, and the page
+waits. PHP's built-in server rewrites no URLs, so on a 3.3 board with clean
+URLs (`enable_mod_rewrite`, which some seeds turn on) a link like
+`/knowledgebase` falls through to the board index. Turn that setting off for
+such a board (`bin/board-php.py BOARD_ROOT BOARD_ROOT/bin/phpbbcli.php
+config:set enable_mod_rewrite 0`) so links go through `app.php`. phpBB 4.0
+routes everything through `index.php` and needs no change.
 
 The MSSQL image sees only the board and the seed-forum checkout (read-only).
 A test that needs a writable directory outside the board, such as an
@@ -219,6 +228,9 @@ through phpBB's CLI, the way an admin would; one that can't be enabled stops
 the reset with phpBB's message. phpBB 3.3's installer otherwise hides why an
 extension failed and stops before its last step. An extension the installer
 enables by itself, such as phpBB 3.3's `phpbb/viglink`, is purged again.
+phpBB's CLI enable keeps the cached service container it built before, so
+reset and `--enable` purge the cache after enabling; otherwise seeds and pages
+would not find the new extensions' services.
 
 ## Importing A Real Board
 

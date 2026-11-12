@@ -307,6 +307,13 @@ for ext_name in "${EXT_NAMES[@]}"; do
 	fi
 done
 
+# phpBB's CLI enable leaves the cached service container as it was built
+# before (with no extensions, after the installer's own were purged above), so
+# seeds and pages would not find the new extensions' services until a purge.
+if [ "${#EXT_NAMES[@]}" -gt 0 ]; then
+	(cd "$PHPBB_ROOT" && board_php bin/phpbbcli.php cache:purge --no-interaction)
+fi
+
 echo "==> Fixing permissions for the web server group (www-data)"
 for d in cache store files config images/avatars/upload; do
 	if [ -d "$PHPBB_ROOT/$d" ]; then
