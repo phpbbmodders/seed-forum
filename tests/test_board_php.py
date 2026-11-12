@@ -51,6 +51,14 @@ class BoardPhpTests(unittest.TestCase):
         self.root.with_name('board.outside').symlink_to(target)
         self.assertFalse(any('outside' in arg or 'elsewhere' in arg for arg in self.docker_argv()))
 
+    def test_server_worker_count_is_passed_through(self):
+        """PHP_CLI_SERVER_WORKERS reaches the container when set, for bin/serve-board.py."""
+        with patch.dict(board_php.os.environ, {'PHP_CLI_SERVER_WORKERS': '4'}):
+            self.assertIn(['-e', 'PHP_CLI_SERVER_WORKERS'], [self.docker_argv()[i:i + 2] for i in range(len(self.docker_argv()))])
+        with patch.dict(board_php.os.environ, {}, clear=False):
+            board_php.os.environ.pop('PHP_CLI_SERVER_WORKERS', None)
+            self.assertNotIn('PHP_CLI_SERVER_WORKERS', self.docker_argv())
+
 
 if __name__ == '__main__':
     unittest.main()
