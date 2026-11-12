@@ -1,0 +1,48 @@
+# The kinerity-33.yml board with its two extensions: kinerity/knowledgebase
+# (mount it, enable it in the ACP, then seed it) and phpbbmodders/knowledgebase
+# (disable kinerity, then mount and enable this one, which imports kinerity's
+# data). Never use it with --reset. See docs/usage.md.
+variables:
+  PHPBB_ROOT: /home/william/Desktop/repos/seeded-board/kinerity-33
+
+  KINERITY_EXT_SRC: /home/william/Desktop/repos/knowledgebase-crizz0
+
+  KB_EXT_SRC: /home/william/Desktop/repos/knowledgebase
+
+  # Must match the database the board was reset with.
+  KINERITY_DATABASE: mysql
+
+  SERVER_NAME: localhost
+
+  NGINX_SITE: /etc/nginx/sites-available/phpbb-kinerity-33.conf
+
+  SERVER_PORT: '8161'
+
+board:
+  root: ${PHPBB_ROOT}
+
+  phpbb_branch: '3.3'
+
+  database: ${KINERITY_DATABASE}
+
+  server_name: ${SERVER_NAME}
+
+  server_port: ${SERVER_PORT}
+
+  nginx_site: ${NGINX_SITE}
+
+  seeds: []
+
+styles: {}
+
+extensions:
+  kinerity:
+    source: ${KINERITY_EXT_SRC}
+
+    # 2,000 categories and 50,000 articles unless SEED_KINERITY_CATEGORIES
+    # and SEED_KINERITY_ARTICLES say otherwise.
+    seeds:
+      - bin/seed-kinerity-fixtures.php
+
+  knowledgebase:
+    source: ${KB_EXT_SRC}

@@ -10,7 +10,8 @@ enabled state, seed fixtures, or purge cache independently of resetting.
 The reset fills an empty board folder with the phpBB branch the config names in `board.phpbb_branch`
 (see [phpBB Branch](#phpbb-branch)). The seed scripts,
 `bin/seed-standard-fixtures.php`, `bin/seed-kb-fixtures.php`, `bin/seed-wiki-fixtures.php`,
-`bin/seed-seenotes-fixtures.php` and `bin/seed-translationhelper-fixtures.php`, can also be
+`bin/seed-seenotes-fixtures.php`, `bin/seed-translationhelper-fixtures.php` and
+`bin/seed-kinerity-fixtures.php`, can also be
 run on their own with `bin/run-seed.php` against any installed board.
 
 ## Quick Start
@@ -416,9 +417,57 @@ English string changes, one is removed, one is added, and no Swedish files come 
 "could not be put back" warning. `config/translationhelper-33.yml` and `config/translationhelper-40.yml`
 build these boards on phpBB 3.3 and 4.0.
 
+`bin/seed-kinerity-fixtures.php` builds a large knowledge base in the `kinerity/knowledgebase`
+extension, to test moving a board to phpBB Modders Knowledge Base: by default 2,000 categories up to
+five levels deep and 50,000 articles (set `SEED_KINERITY_CATEGORIES` and `SEED_KINERITY_ARTICLES` for
+other sizes; the content is the same on every run). Category descriptions use BBCode, some longer than
+255 characters. Articles are approved, waiting, deleted or denied; most are in one category, about a
+quarter in two to four, and a few in none or only in a category that no longer exists
+(`SEED_KINERITY_LEFTOVERS=0` leaves those out: kinerity never leaves them behind itself, and its article
+list stops with an error on them; that list also loads every article at once, so kinerity itself only
+displays boards of a few thousand articles). Titles,
+descriptions and text include BBCode, smilies, links, HTML special characters and Unicode, and some
+authors are deleted members. A `KB Reviewers` group (with `forum_blair`) gets kinerity's approve
+permission, `forum_drew` a Never on posting and `forum_casey` a Yes on changing authors, on top of the
+roles kinerity sets up; a kinerity notification and a member's setting for it are left behind. It needs
+the standard fixtures first. See [Moving from kinerity/knowledgebase](#moving-from-kinerityknowledgebase).
+
 All fixture users use `KbTest1234!`. Installer admin credentials are
 `admin` / `KbTest1234!`, intended for disposable local boards.
 These credentials are public. Keep the board local; do not expose it to the internet.
+
+## Moving from kinerity/knowledgebase
+
+`config/kinerity-33.yml` and `config/kinerity-40.yml` build a board for testing the move from
+`kinerity/knowledgebase` to `phpbbmodders/knowledgebase`, on phpBB 3.3 or 4.0. Set
+`KINERITY_DATABASE` (and, for a second board beside the first, `PHPBB_ROOT`, `SERVER_PORT` and
+`NGINX_SITE`) in the environment to pick another database. kinerity cannot be enabled from phpBB's
+command line, because its first migration reads the current user's name, which the CLI has none of. So
+the reset installs the board without it, and `config/kinerity-33-switch.yml` (or `-40-`) handles both
+extensions afterwards:
+
+```bash
+bin/reset-board.sh --config config/kinerity-33.yml --reset
+bin/reset-board.sh --config config/kinerity-33-switch.yml --mount --only kinerity
+```
+
+Enable `kinerity/knowledgebase` in the ACP: by hand, or with phpbb-release-tools'
+`phpbb-test-board/acp_extension.py enable kinerity/knowledgebase --url http://localhost:8161`. Then seed
+it, disable it, and enable phpBB Modders Knowledge Base, which imports kinerity's data:
+
+```bash
+bin/reset-board.sh --config config/kinerity-33-switch.yml --seed-only --only kinerity
+bin/reset-board.sh --config config/kinerity-33-switch.yml --disable --only kinerity
+bin/reset-board.sh --config config/kinerity-33-switch.yml --mount --enable --only knowledgebase
+```
+
+kinerity cannot be installed on MSSQL (its first migration inserts a sample category with a fixed id,
+which MSSQL refuses for an identity column), so there is no MSSQL kinerity board.
+
+The last command enables it through phpBB's command line. To test the ACP instead, use `--mount`
+alone, then `acp_extension.py enable phpbbmodders/knowledgebase`. The Knowledge Base repository's
+`tests/board/kinerity_import_check.php` then compares the import with kinerity's data. Never use a
+`-switch` config with `--reset`.
 
 ## Requirements And Checks
 
@@ -473,10 +522,12 @@ bin/reset-board.sh --validate
 - `bin/seed-seenotes-fixtures.php`: See Notes-specific fixtures.
 - `bin/seed-translationhelper-fixtures.php`: Translation Helper test language and fixture extension.
 - `bin/translationhelper-upgrade-fixture.php`: upgrades that fixture extension to 1.1.0 by replacing its folder.
+- `bin/seed-kinerity-fixtures.php`: a large kinerity/knowledgebase knowledge base, for testing the move to phpBB Modders Knowledge Base.
 - `bin/extension-state.php`: reads enabled/disabled extension state.
 - `config/local.yml.example`: example runner configuration; edit its local paths.
 - `config/bare.yml`: original development-board profile; edit paths and style choices before use.
 - `config/wiki-master.yml`: phpBB 4.0 (master) wiki board example; edit its paths before use.
+- `config/kinerity-33.yml`, `config/kinerity-40.yml`: kinerity/knowledgebase boards on phpBB 3.3 and 4.0, with `-switch` configs for the move to phpBB Modders Knowledge Base.
 - `config/install.yml.example`: phpBB installer settings template.
 - `config/import.yml.example`: example board built from a real board's dump; edit its paths before use.
 - `config/nginx-site.conf.example`: template for new nginx board sites.

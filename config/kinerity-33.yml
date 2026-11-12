@@ -1,0 +1,39 @@
+# Disposable phpBB 3.3 board running kinerity/knowledgebase with a large
+# knowledge base, to test moving it to phpbbmodders/knowledgebase.
+# kinerity cannot be enabled from phpBB's command line (its first migration
+# reads the current user's name, which the CLI does not have), so this config
+# installs the board alone; kinerity-33-switch.yml then mounts kinerity, which
+# is enabled in the ACP, seeds it, and switches to phpbbmodders/knowledgebase.
+# See docs/usage.md (Moving from kinerity/knowledgebase).
+variables:
+  PHPBB_ROOT: /home/william/Desktop/repos/seeded-board/kinerity-33
+
+  # sqlite, mysql, mariadb, postgres or mssql
+  KINERITY_DATABASE: mysql
+
+  SERVER_NAME: localhost
+
+  # Remove this variable and board.nginx_site to leave nginx unchanged.
+  NGINX_SITE: /etc/nginx/sites-available/phpbb-kinerity-33.conf
+
+  SERVER_PORT: '8161'
+
+board:
+  root: ${PHPBB_ROOT}
+
+  phpbb_branch: '3.3'
+
+  database: ${KINERITY_DATABASE}
+
+  server_name: ${SERVER_NAME}
+
+  server_port: ${SERVER_PORT}
+
+  nginx_site: ${NGINX_SITE}
+
+  seeds:
+    - bin/seed-standard-fixtures.php
+
+styles: {}
+
+extensions: {}
