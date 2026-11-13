@@ -138,6 +138,31 @@ When the folder already holds phpBB, reset checks that its version belongs
 to the configured branch (3.3.x for `3.3`, 4.x for `master`) and that it
 has `vendor/` packages. Otherwise it stops before changing anything.
 
+### Testing against an open phpBB pull request
+
+`board.phpbb_pull_request` builds a `master` board from an open
+[phpbb/phpbb](https://github.com/phpbb/phpbb) pull request instead of the
+`master` branch, for testing an extension against a core change that is not
+merged yet. It takes the pull request's number and only works with
+`phpbb_branch: master`:
+
+```yaml
+board:
+  root: /tmp/seed-forum-board-40-pr6927
+  phpbb_branch: master
+  phpbb_pull_request: 6927
+  server_port: '8096'
+  seeds:
+    - bin/seed-standard-fixtures.php
+```
+
+Reset fetches the pull request's head (`refs/pull/6927/head`) the same way it
+fetches `master`, and records that ref in `.seed-forum-phpbb-source`. A board
+folder keeps the phpBB it was filled with, so reset refuses a folder built
+from another source: a pull-request board never quietly runs plain `master`,
+or the reverse. Use a separate board folder for each, and empty it to pick up
+new commits on the pull request.
+
 On a new nginx site, `master` boards route through `index.php` and 3.3
 boards through `app.php`. In phpBB 4.0, `app.php` only redirects to
 `index.php`. An existing site keeps its routing; delete it to have reset

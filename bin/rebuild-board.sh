@@ -17,6 +17,9 @@
 #   PHPBB_BRANCH 3.3 downloads the current 3.3.x release zip (SHA-256 checked);
 #                master exports phpBB's master branch from GitHub with git and
 #                installs its Composer packages the way phpBB's release build does
+#   PHPBB_PULL_REQUEST optional phpbb/phpbb pull request number (master only);
+#                exports that pull request's head instead of the master branch.
+#                An existing tree must come from the same source.
 #   SERVER_NAME  hostname the installer records for generated URLs
 #   SERVER_PORT  port the installer records for generated URLs
 #   NGINX_SITE   nginx sites-available path; when enabled, create/update its
@@ -93,28 +96,42 @@ download_release_33() {
 # installs the locked non-dev packages. Git checks every object against its
 # hash; the exported commit is recorded in .seed-forum-phpbb-source.
 PHPBB_GIT_URL="https://github.com/phpbb/phpbb.git"
+PHPBB_PULL_REQUEST="${PHPBB_PULL_REQUEST:-}"
+if [ -n "$PHPBB_PULL_REQUEST" ]; then
+	if ! [[ "$PHPBB_PULL_REQUEST" =~ ^[1-9][0-9]*$ ]]; then
+		echo "PHPBB_PULL_REQUEST must be a pull request number, not '$PHPBB_PULL_REQUEST'." >&2
+		exit 1
+	fi
+	if [ "$PHPBB_BRANCH" != master ]; then
+		echo "PHPBB_PULL_REQUEST needs PHPBB_BRANCH master." >&2
+		exit 1
+	fi
+	PHPBB_GIT_REF="refs/pull/$PHPBB_PULL_REQUEST/head"
+else
+	PHPBB_GIT_REF="master"
+fi
 export_master() {
 	local cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/seed-forum/phpbb-master.git"
-	echo "==> $PHPBB_ROOT is missing or empty; exporting phpBB master from $PHPBB_GIT_URL"
+	echo "==> $PHPBB_ROOT is missing or empty; exporting phpBB $PHPBB_GIT_REF from $PHPBB_GIT_URL"
 	if [ ! -d "$cache_dir" ]; then
 		mkdir -p "$(dirname "$cache_dir")"
 		git init -q --bare "$cache_dir"
 	fi
 	# A shallow fetch is enough for git archive and keeps the cache small.
-	git -C "$cache_dir" fetch -q --depth 1 "$PHPBB_GIT_URL" master
+	git -C "$cache_dir" fetch -q --depth 1 "$PHPBB_GIT_URL" "$PHPBB_GIT_REF"
 	local commit
 	commit="$(git -C "$cache_dir" rev-parse FETCH_HEAD)"
 	BUILD_DIR="$(mktemp -d)"
 	trap 'rm -rf "$BUILD_DIR"' EXIT
 	git -C "$cache_dir" archive "$commit" phpBB composer.phar | tar -xf - -C "$BUILD_DIR"
-	echo "==> Installing Composer packages for phpBB master $commit"
+	echo "==> Installing Composer packages for phpBB $PHPBB_GIT_REF $commit"
 	(cd "$BUILD_DIR/phpBB" && php ../composer.phar install --no-dev --optimize-autoloader --ignore-platform-reqs --no-interaction --no-progress)
 	mkdir -p "$PHPBB_ROOT"
 	(shopt -s dotglob && mv "$BUILD_DIR/phpBB/"* "$PHPBB_ROOT/")
 	rm -rf "$BUILD_DIR"
 	trap - EXIT
-	printf '%s %s\n' "$PHPBB_GIT_URL" "$commit" > "$PHPBB_ROOT/.seed-forum-phpbb-source"
-	echo "==> Exported phpBB master $commit into $PHPBB_ROOT"
+	printf '%s %s %s\n' "$PHPBB_GIT_URL" "$commit" "$PHPBB_GIT_REF" > "$PHPBB_ROOT/.seed-forum-phpbb-source"
+	echo "==> Exported phpBB $PHPBB_GIT_REF $commit into $PHPBB_ROOT"
 }
 
 # Only runs when PHPBB_ROOT is missing or completely empty, so an existing
@@ -147,6 +164,22 @@ esac
 if ! [[ "$tree_version" =~ $expected_version ]]; then
 	echo "PHPBB_ROOT ($PHPBB_ROOT) holds phpBB '${tree_version:-unknown}', not the configured phpbb_branch $PHPBB_BRANCH." >&2
 	echo "Set board.phpbb_branch to match it, or empty the board folder to fetch $PHPBB_BRANCH." >&2
+	exit 1
+fi
+# A master tree records the ref it was exported from (trees from before that
+# record it came from master). Refuse a tree from another source, so a board
+# meant to test a pull request never runs plain master, or the reverse.
+if [ "$PHPBB_BRANCH" = master ] && [ -f "$PHPBB_ROOT/.seed-forum-phpbb-source" ]; then
+	read -r _ _ tree_ref < "$PHPBB_ROOT/.seed-forum-phpbb-source" || true
+	tree_ref="${tree_ref:-master}"
+	if [ "$tree_ref" != "$PHPBB_GIT_REF" ]; then
+		echo "PHPBB_ROOT ($PHPBB_ROOT) holds phpBB from $tree_ref, not the configured $PHPBB_GIT_REF." >&2
+		echo "Empty the board folder to fetch $PHPBB_GIT_REF." >&2
+		exit 1
+	fi
+elif [ -n "$PHPBB_PULL_REQUEST" ]; then
+	echo "PHPBB_ROOT ($PHPBB_ROOT) has no record of its phpBB source, so it can't be confirmed as $PHPBB_GIT_REF." >&2
+	echo "Empty the board folder to fetch $PHPBB_GIT_REF." >&2
 	exit 1
 fi
 if [ ! -f "$PHPBB_ROOT/vendor/autoload.php" ]; then
