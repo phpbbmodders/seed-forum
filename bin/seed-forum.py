@@ -20,6 +20,8 @@ REPO = Path(__file__).resolve().parent.parent
 VARIABLE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 PACKAGE = re.compile(r"[a-z0-9_.-]+/[a-z0-9_.-]+")
 # board.phpbb_branch values: 3.3 is the current release, master is phpBB 4.0.
+# board.phpbb_pull_request (master only) builds the board from that open
+# phpbb/phpbb pull request instead of the master branch.
 PHPBB_BRANCHES = ("3.3", "master")
 # board.database values; anything but sqlite runs in a container (bin/db-container.py).
 DATABASES = ("sqlite", "mysql", "mariadb", "postgres", "mssql")
@@ -135,7 +137,7 @@ def load_config(path):
             fail(f"{context} must contain PHP scripts")
         return result
 
-    board = mapping(document.get("board"), "board", {"root", "seeds", "server_name", "server_port", "nginx_site", "phpbb_branch", "database", "import"})
+    board = mapping(document.get("board"), "board", {"root", "seeds", "server_name", "server_port", "nginx_site", "phpbb_branch", "phpbb_pull_request", "database", "import"})
     root = path_value(board.get("root"), path.parent)
     if root == Path(root.anchor) or root == REPO or root in REPO.parents:
         fail("board.root must be a dedicated board directory")
@@ -147,6 +149,16 @@ def load_config(path):
     branch = expand(str(branch) if isinstance(branch, (int, float)) and not isinstance(branch, bool) else branch)
     if branch not in PHPBB_BRANCHES:
         fail(f"board.phpbb_branch must be one of: {', '.join(PHPBB_BRANCHES)}")
+    # An open phpbb/phpbb pull request to build a master board from, for
+    # testing an extension against a core change that is not merged yet.
+    pull_request = board.get("phpbb_pull_request")
+    if pull_request is not None:
+        pull_request = expand(str(pull_request)) if not isinstance(pull_request, bool) else ""
+        if not pull_request.isdigit() or int(pull_request) < 1:
+            fail("board.phpbb_pull_request must be a phpbb/phpbb pull request number")
+        if branch != "master":
+            fail("board.phpbb_pull_request needs board.phpbb_branch: master")
+        pull_request = str(int(pull_request))
     database = expand(str(board.get("database", "sqlite")))
     if database not in DATABASES:
         fail(f"board.database must be one of: {', '.join(DATABASES)}")
@@ -158,6 +170,7 @@ def load_config(path):
         "server_name": expand(board.get("server_name", "localhost")),
         "server_port": port,
         "phpbb_branch": branch,
+        "phpbb_pull_request": pull_request,
         "database": database,
         "nginx_site": path_value(board["nginx_site"], path.parent) if board.get("nginx_site") else None,
         "seeds": scripts(board.get("seeds", []), "board.seeds"),
@@ -422,6 +435,8 @@ def main():
     if args.status:
         print(f"Board: {root} ({'installed' if (root / 'config.php').is_file() else 'not installed'})")
         print(f"phpBB branch: {config['phpbb_branch']}")
+        if config["phpbb_pull_request"]:
+            print(f"phpBB pull request: #{config['phpbb_pull_request']}")
         print(f"Database: {'MariaDB, imported from a dump' if config['import'] else config['database']}")
         if config['database'] != 'sqlite':
             run(['python3', REPO / 'bin/db-container.py', 'status', root], dry=args.dry_run)
@@ -506,6 +521,8 @@ def main():
             print(f'Reset: remove config.php and store/ contents (database, extension data) under {root}, reinstall phpBB {config["phpbb_branch"]} on {config["database"]}, mount and enable: {", ".join(sorted(names)) or "no extensions"}')
         env = os.environ.copy()
         env.update(PHPBB_ROOT=str(root), PHPBB_BRANCH=config["phpbb_branch"], DB_ENGINE=config["database"], SEED_FORUM_CONFIGURED="1", SERVER_NAME=config["server_name"], SERVER_PORT=config["server_port"], NGINX_SITE=str(config["nginx_site"] or root / ".no-nginx-site"), SEED_FORUM_NGINX_ENABLED='1' if config['nginx_site'] else '0')
+        if config["phpbb_pull_request"]:
+            env["PHPBB_PULL_REQUEST"] = config["phpbb_pull_request"]
         if config["import"]:
             settings = config["import"]
             env["SEED_FORUM_IMPORT"] = json.dumps({**settings, "sql": str(settings["sql"])})

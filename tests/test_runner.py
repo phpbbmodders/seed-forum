@@ -313,6 +313,34 @@ class RunnerTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 runner.load_config(self.config)
 
+    def test_phpbb_pull_request_needs_master_and_a_number(self):
+        self.assertIsNone(runner.load_config(self.config)['phpbb_pull_request'])
+        self.document['board']['phpbb_branch'] = 'master'
+        for value, expected in [(6927, '6927'), ('6927', '6927')]:
+            self.document['board']['phpbb_pull_request'] = value
+            self.save()
+            self.assertEqual(runner.load_config(self.config)['phpbb_pull_request'], expected)
+        for value in [0, -1, 'refs/pull/1/head', '12; rm -rf /', True, 1.5]:
+            self.document['board']['phpbb_pull_request'] = value
+            self.save()
+            with self.assertRaisesRegex(ValueError, 'board.phpbb_pull_request'):
+                runner.load_config(self.config)
+        self.document['board']['phpbb_branch'] = '3.3'
+        self.document['board']['phpbb_pull_request'] = 6927
+        self.save()
+        with self.assertRaisesRegex(ValueError, 'needs board.phpbb_branch: master'):
+            runner.load_config(self.config)
+
+    def test_reset_passes_phpbb_pull_request_to_backend(self):
+        (self.root / 'install.disabled').mkdir()
+        self.document['board']['phpbb_branch'] = 'master'
+        self.document['board']['phpbb_pull_request'] = 6927
+        self.save()
+        with patch.object(runner.shutil, 'which', return_value='/usr/bin/tool'), patch.object(runner, 'run') as backend, \
+                patch.object(sys, 'argv', ['runner', '--config', str(self.config), '--reset', '--dry-run']), contextlib.redirect_stdout(io.StringIO()):
+            runner.main()
+        self.assertEqual(backend.call_args_list[0].kwargs['env']['PHPBB_PULL_REQUEST'], '6927')
+
     def test_database_defaults_to_sqlite_and_accepts_container_engines(self):
         self.assertEqual(runner.load_config(self.config)['database'], 'sqlite')
         for value in ['mysql', 'mariadb', 'postgres', 'mssql', 'sqlite']:
@@ -404,6 +432,34 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("holds phpBB '3.3.19', not the configured phpbb_branch master", result.stderr)
         self.assertTrue((self.root / 'install').is_dir())
+
+    def rebuild_master(self, source_record, pull_request=''):
+        """Run the reset backend on a 4.0 tree with the given source record."""
+        (self.root / 'install').mkdir(exist_ok=True)
+        (self.root / 'includes').mkdir(exist_ok=True)
+        (self.root / 'includes/constants.php').write_text("<?php\n@define('PHPBB_VERSION', '4.0.0-a3-dev');\n")
+        record = self.root / '.seed-forum-phpbb-source'
+        if source_record is None:
+            record.unlink(missing_ok=True)
+        else:
+            record.write_text(source_record)
+        env = {**runner.os.environ, 'SEED_FORUM_CONFIGURED': '1', 'PHPBB_ROOT': str(self.root), 'PHPBB_BRANCH': 'master', 'PHPBB_PULL_REQUEST': pull_request, 'SERVER_NAME': 'localhost', 'SERVER_PORT': '8095', 'NGINX_SITE': str(self.root / '.no-nginx-site'), 'PATH': '/usr/bin:/bin'}
+        return runner.subprocess.run(['bash', str(runner.REPO / 'bin/rebuild-board.sh')], env=env, capture_output=True, text=True)
+
+    def test_rebuild_refuses_tree_from_another_phpbb_source(self):
+        url = 'https://github.com/phpbb/phpbb.git abc123'
+        result = self.rebuild_master(url + '\n', '6927')
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('holds phpBB from master, not the configured refs/pull/6927/head', result.stderr)
+        result = self.rebuild_master(url + ' refs/pull/6927/head\n')
+        self.assertIn('holds phpBB from refs/pull/6927/head, not the configured master', result.stderr)
+        result = self.rebuild_master(None, '6927')
+        self.assertIn("can't be confirmed as refs/pull/6927/head", result.stderr)
+        # A matching source gets past the check, to the vendor/ check that follows it.
+        result = self.rebuild_master(url + ' refs/pull/6927/head\n', '6927')
+        self.assertIn('has no vendor/ packages', result.stderr)
+        result = self.rebuild_master(None, '6927; true')
+        self.assertIn('must be a pull request number', result.stderr)
 
     def clean_store(self):
         """Run the reset's store/ cleaner on the test board and return the result."""

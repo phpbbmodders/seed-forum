@@ -13,7 +13,7 @@ local, not internet-facing.
 
 ## Features
 
-- Download phpBB when the board directory is missing or empty: the 3.3.x release with SHA-256 verification, or phpBB 4.0 from the `master` branch through git (`board.phpbb_branch: master`).
+- Download phpBB when the board directory is missing or empty: the 3.3.x release with SHA-256 verification, or phpBB 4.0 from the `master` branch through git (`board.phpbb_branch: master`), or from an open phpBB pull request (`board.phpbb_pull_request`).
 - Install on SQLite, or on MySQL, MariaDB, PostgreSQL or MSSQL in a fresh Docker container that only listens on 127.0.0.1 (`board.database`).
 - Bind-mount local extensions and enable or disable them through phpBB's CLI.
 - Seed standard forum fixtures and optional Knowledgebase fixtures.
