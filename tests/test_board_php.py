@@ -59,6 +59,14 @@ class BoardPhpTests(unittest.TestCase):
             board_php.os.environ.pop('PHP_CLI_SERVER_WORKERS', None)
             self.assertNotIn('PHP_CLI_SERVER_WORKERS', self.docker_argv())
 
+    def test_host_groups_are_added(self):
+        """The host user's other groups reach the container, so group-writable mounted folders stay writable."""
+        with patch.object(board_php.os, 'getgid', return_value=1000), \
+                patch.object(board_php.os, 'getgroups', return_value=[1000, 33, 27]):
+            argv = self.docker_argv()
+        added = [argv[i + 1] for i, arg in enumerate(argv) if arg == '--group-add']
+        self.assertEqual(added, ['27', '33'])
+
 
 if __name__ == '__main__':
     unittest.main()

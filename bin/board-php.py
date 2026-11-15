@@ -66,6 +66,10 @@ def main() -> int:
     argv = ["docker", "run", "--rm", "-i", "--init", "--network", "host",
             "--user", f"{os.getuid()}:{os.getgid()}", "-e", "HOME=/tmp",
             "-v", f"{root}:{root}", "-v", f"{REPO}:{REPO}:ro"]
+    # The host user's other groups too, as PHP has them on the host: mounted extension
+    # folders that are writable through a group, such as www-data, stay writable.
+    for gid in sorted(set(os.getgroups()) - {os.getgid()}):
+        argv += ["--group-add", str(gid)]
     # Worker count for PHP's built-in server (bin/serve-board.py)
     if "PHP_CLI_SERVER_WORKERS" in os.environ:
         argv += ["-e", "PHP_CLI_SERVER_WORKERS"]
