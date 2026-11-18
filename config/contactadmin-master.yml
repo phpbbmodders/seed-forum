@@ -3,7 +3,7 @@
 variables:
   PHPBB_ROOT: /home/william/Desktop/repos/seeded-board/contactadmin-master
 
-  CONTACTADMIN_EXT_SRC: /home/william/Desktop/repos/contactadmin
+  CONTACTADMIN_EXT_SRC: /home/william/Desktop/repos/phpBB/contactadmin
 
   SERVER_NAME: localhost
 

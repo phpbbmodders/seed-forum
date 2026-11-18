@@ -3,7 +3,7 @@
 variables:
   PHPBB_ROOT: /home/william/Desktop/repos/seeded-board/seenotes-33
 
-  SEENOTES_EXT_SRC: /home/william/Desktop/repos/seenotes
+  SEENOTES_EXT_SRC: /home/william/Desktop/repos/phpBB/seenotes
 
   SERVER_NAME: localhost
 

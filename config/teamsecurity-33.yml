@@ -3,7 +3,7 @@
 variables:
   PHPBB_ROOT: /home/william/Desktop/repos/seeded-board/teamsecurity-33
 
-  TEAMSECURITY_EXT_SRC: /home/william/Desktop/repos/teamsecurity
+  TEAMSECURITY_EXT_SRC: /home/william/Desktop/repos/phpBB/teamsecurity
 
   SERVER_NAME: localhost
 

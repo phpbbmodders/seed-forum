@@ -5,9 +5,9 @@
 variables:
   PHPBB_ROOT: /home/william/Desktop/repos/seeded-board/kinerity-40
 
-  KINERITY_EXT_SRC: /home/william/Desktop/repos/knowledgebase-crizz0
+  KINERITY_EXT_SRC: /home/william/Desktop/repos/phpBB/knowledgebase-crizz0
 
-  KB_EXT_SRC: /home/william/Desktop/repos/knowledgebase
+  KB_EXT_SRC: /home/william/Desktop/repos/phpBB/knowledgebase
 
   # Must match the database the board was reset with.
   KINERITY_DATABASE: mysql

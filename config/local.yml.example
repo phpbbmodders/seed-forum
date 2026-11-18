@@ -5,13 +5,13 @@ variables:
   PHPBB_ROOT: /home/william/Desktop/repos/seeded-board/kb
 
   # Knowledgebase checkout; its Composer name determines the mount target.
-  KB_EXT_SRC: /home/william/Desktop/repos/knowledgebase
+  KB_EXT_SRC: /home/william/Desktop/repos/phpBB/knowledgebase
 
   # phpBB Modders Wiki checkout; its Composer name determines the mount target.
-  WIKI_EXT_SRC: /home/william/Desktop/repos/phpbb-ext-wiki
+  WIKI_EXT_SRC: /home/william/Desktop/repos/phpBB/phpbb-ext-wiki
 
   # Optional extension with no seed script: uncomment this and its entry below.
-  # HF_EXT_SRC: /home/william/Desktop/repos/holiday_flare
+  # HF_EXT_SRC: /home/william/Desktop/repos/phpBB/holiday_flare
 
   # Hostname recorded in generated board URLs during installation.
   SERVER_NAME: localhost

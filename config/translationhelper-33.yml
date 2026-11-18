@@ -3,7 +3,7 @@
 variables:
   PHPBB_ROOT: /home/william/Desktop/repos/seeded-board/translationhelper-33
 
-  TRANSLATIONHELPER_EXT_SRC: /home/william/Desktop/repos/translationhelper
+  TRANSLATIONHELPER_EXT_SRC: /home/william/Desktop/repos/phpBB/translationhelper
 
   SERVER_NAME: localhost
 

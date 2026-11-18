@@ -6,7 +6,7 @@ variables:
   PHPBB_ROOT: /home/william/Desktop/repos/seeded-board/wiki-master
 
   # phpbbmodders/phpbb-ext-wiki checkout; its Composer name sets the mount target.
-  WIKI_EXT_SRC: /home/william/Desktop/repos/phpbb-ext-wiki
+  WIKI_EXT_SRC: /home/william/Desktop/repos/phpBB/phpbb-ext-wiki
 
   # Hostname recorded in generated board URLs during installation.
   SERVER_NAME: localhost

@@ -4,9 +4,9 @@
 variables:
   PHPBB_ROOT: /home/william/Desktop/repos/seeded-board/activity24hours-33
 
-  ACTIVITY24HOURS_EXT_SRC: /home/william/Desktop/repos/activity24hours
+  ACTIVITY24HOURS_EXT_SRC: /home/william/Desktop/repos/phpBB/activity24hours
 
-  HIDEBOTS_EXT_SRC: /home/william/Desktop/repos/hidebots
+  HIDEBOTS_EXT_SRC: /home/william/Desktop/repos/phpBB/hidebots
 
   SERVER_NAME: localhost
 

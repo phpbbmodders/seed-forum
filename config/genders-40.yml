@@ -2,7 +2,7 @@
 variables:
   PHPBB_ROOT: /home/william/Desktop/repos/seeded-board/genders-40
 
-  GENDERS_EXT_SRC: /home/william/Desktop/repos/genders
+  GENDERS_EXT_SRC: /home/william/Desktop/repos/phpBB/genders
 
   SERVER_NAME: localhost
 
