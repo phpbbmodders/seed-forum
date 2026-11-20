@@ -37,7 +37,7 @@ class seed_forum_style_installer extends acp_styles
 				return (int) $this->install_style($style);
 			}
 		}
-		throw new RuntimeException('Style cannot be installed; check style.cfg and its installed parent: ' . $directory);
+		throw new RuntimeException('Style cannot be installed; check style.cfg or composer.json and its installed parent: ' . $directory);
 	}
 }
 

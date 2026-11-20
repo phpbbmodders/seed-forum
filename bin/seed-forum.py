@@ -383,8 +383,9 @@ def main():
         for label, style in config["styles"].items():
             source = style["source"]
             target = root / "styles" / label
-            if not (source / "style.cfg").is_file():
-                fail(f"Missing style.cfg: {source}")
+            # phpBB 3.3 styles describe themselves in style.cfg, 4.0 styles in composer.json
+            if not ((source / "style.cfg").is_file() or (source / "composer.json").is_file()):
+                fail(f"Missing style.cfg (phpBB 3.3) or composer.json (phpBB 4.0): {source}")
             if target.is_symlink() or is_mounted(target) or not target.parent.resolve().is_relative_to(root):
                 fail(f"Style target must be an ordinary directory inside the board: {target}")
             if source == target.resolve() or source.is_relative_to(target.resolve()) or target.resolve().is_relative_to(source):

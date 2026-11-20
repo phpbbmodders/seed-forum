@@ -137,6 +137,13 @@ class RunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Missing style.cfg'):
             self.invoke('--reset', '--skip-seed')
 
+    def test_style_with_composer_json_is_accepted(self):
+        source = self.add_style()
+        (source / 'style.cfg').unlink()
+        (source / 'composer.json').write_text('{"type": "phpbb-style", "extra": {"parent-style": "prosilver"}}\n')
+        self.invoke('--install-styles')
+        self.assertTrue((self.root / 'styles/Example/composer.json').is_file())
+
     def test_style_target_symlink_is_rejected(self):
         source = self.add_style()
         (self.root / 'styles').mkdir()
