@@ -307,7 +307,9 @@ shows the container and whether it is running.
 ## Styles
 
 Add local styles by directory name. Their parent style must already be installed
-(prosilver is installed with the board). For example:
+(prosilver is installed with the board). Each source folder needs the style's
+own description file: `style.cfg` for phpBB 3.3, `composer.json` for phpBB 4.0
+(master) boards. For example:
 
 ```yaml
 styles:
